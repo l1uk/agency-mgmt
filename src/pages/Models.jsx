@@ -15,9 +15,9 @@ export default function Models() {
 
   async function load() {
     const [{ data: m }, { data: s }, { data: a }] = await Promise.all([
-      supabase.from('models').select('*, schools(name), agents(name)').order('last_name'),
+      supabase.from('models').select('*, schools(name), agents(name, is_giorgio_agent)').order('last_name'),
       supabase.from('schools').select('id, name').order('name'),
-      supabase.from('agents').select('id, name').order('name'),
+      supabase.from('agents').select('id, name, is_giorgio_agent').order('name'),
     ])
     setModels(m ?? [])
     setSchools(s ?? [])
@@ -132,7 +132,11 @@ export default function Models() {
                 style={form.school_id ? {opacity:0.4} : {}}
               >
                 <option value="">— nessuno —</option>
-                {agents.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
+                {agents.map(a => (
+                  <option key={a.id} value={a.id}>
+                    {a.name}{a.is_giorgio_agent ? ' (Giorgio agente)' : ''}
+                  </option>
+                ))}
               </select>
             </div>
           </div>
@@ -166,7 +170,11 @@ export default function Models() {
                     <tr key={m.id} style={editing === m.id ? { background: '#fffbf0' } : {}}>
                       <td style={{ fontWeight: 500 }}>{m.last_name} {m.first_name}</td>
                       <td>{m.schools?.name ?? <span style={{ color: 'var(--text-3)' }}>—</span>}</td>
-                      <td>{m.agents?.name  ?? <span style={{ color: 'var(--text-3)' }}>—</span>}</td>
+                      <td>
+                        {m.agents?.name
+                          ? `${m.agents.name}${m.agents.is_giorgio_agent ? ' (Giorgio agente)' : ''}`
+                          : <span style={{ color: 'var(--text-3)' }}>—</span>}
+                      </td>
                       <td style={{ fontSize: 13, color: 'var(--text-2)' }}>{m.notes}</td>
                       <td>
                         <div style={{ display: 'flex', gap: 6 }}>

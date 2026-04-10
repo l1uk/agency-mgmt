@@ -34,7 +34,6 @@ export function useAuth() {
 
   const signIn = async (email, password) => {
     const { data, error } = await supabase.auth.signInWithPassword({ email, password })
-    if (!error) await supabase.auth.refreshSession()
     return { error, user: data?.user }
   }
 

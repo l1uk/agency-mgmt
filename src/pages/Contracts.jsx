@@ -1,17 +1,17 @@
 import { useState, useEffect } from 'react'
-import { supabase } from '../lib/supabase'
+import { supabase, invokeEdgeFunction, getFreshAccessToken } from '../lib/supabase'
 import Payments from './Payments'
 
 const fmt = n => '€' + parseFloat(n || 0).toLocaleString('it-IT', { minimumFractionDigits: 2 })
 
 const empty = {
   model_id: '', client_name: '', reference_amount: '',
-  start_date: '', end_date: '', status: 'active', exclusive: 'true'
+  start_date: '', end_date: '', first_job_date: '', status: 'active', exclusive: 'true'
 }
 
 const STATUS_LABELS = {
   active: 'Attivo', expiring: 'In scadenza',
-  renewed: 'Rinnovato', expired: 'Scaduto', cancelled: 'Annullato'
+  expired: 'Scaduto', cancelled: 'Annullato'
 }
 
 function renewalBadge(c) {
@@ -74,7 +74,8 @@ export default function Contracts() {
       reference_amount: c.reference_amount ? String(c.reference_amount) : '',
       start_date:       c.start_date,
       end_date:         c.end_date,
-      status:           c.status,
+      first_job_date:   c.first_job_date ?? '',
+      status:           c.status === 'renewed' ? 'active' : c.status,
       exclusive:        String(c.exclusive ?? true),
     })
     window.scrollTo({ top: 0, behavior: 'smooth' })
@@ -91,6 +92,7 @@ export default function Contracts() {
       reference_amount: form.reference_amount ? parseFloat(form.reference_amount) : null,
       start_date:       form.start_date,
       end_date:         form.end_date,
+      first_job_date:   form.first_job_date || null,
       status:           form.status,
       exclusive:        form.exclusive === 'true',
     }
@@ -109,11 +111,22 @@ export default function Contracts() {
     if (!confirm(`Confermi il rinnovo del contratto con ${c.client_name}? La data di fine verrà estesa di 2 anni.`)) return
     const newEnd = new Date(c.end_date)
     newEnd.setFullYear(newEnd.getFullYear() + 2)
-    await supabase.from('contracts').update({
+    const renewedAt = new Date().toISOString()
+    const { error } = await supabase.from('contracts').update({
       end_date:   newEnd.toISOString().slice(0, 10),
-      status:     'renewed',
-      renewed_at: new Date().toISOString(),
+      status:     'active',
+      renewed_at: renewedAt,
     }).eq('id', c.id)
+    if (error) { flash('error', error.message); return }
+
+    const accessToken = await getFreshAccessToken().catch(() => null)
+    if (accessToken) {
+      invokeEdgeFunction('send-contract-renewal-confirmation', {
+        accessToken,
+        body: { contractId: c.id },
+      }).catch(err => console.error('[renewal-confirmation]', err))
+    }
+
     flash('success', 'Contratto rinnovato. Nuova scadenza: ' + newEnd.toISOString().slice(0, 10))
     load()
   }
@@ -182,6 +195,14 @@ export default function Contracts() {
                 value={form.reference_amount} onChange={e => set('reference_amount', e.target.value)} placeholder="Non usato per calcoli" />
             </div>
           </div>
+          <div className="field">
+            <label>Data primo job confermato</label>
+            <input
+              type="date"
+              value={form.first_job_date}
+              onChange={e => set('first_job_date', e.target.value)}
+            />
+          </div>
           <div className="form-row-2">
             <div className="field">
               <label>Tipo inserimento</label>
@@ -195,7 +216,6 @@ export default function Contracts() {
               <select value={form.status} onChange={e => set('status', e.target.value)}>
                 <option value="active">Attivo</option>
                 <option value="expiring">In scadenza</option>
-                <option value="renewed">Rinnovato</option>
                 <option value="expired">Scaduto</option>
                 <option value="cancelled">Annullato</option>
               </select>

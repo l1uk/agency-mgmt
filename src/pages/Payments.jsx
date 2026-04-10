@@ -32,6 +32,7 @@ export default function Payments({ contractId, modelName, clientName, firstJobDa
       .update({ first_job_date: jobDate || null })
       .eq('id', contractId)
     if (error) { flash('error', error.message); return }
+    await load()
     flash('success', 'Data primo job salvata.')
     onFirstJobChange?.(jobDate)
   }
@@ -80,6 +81,11 @@ export default function Payments({ contractId, modelName, clientName, firstJobDa
         </div>
         <button className="btn btn-ghost" onClick={saveJobDate}>Salva data</button>
       </div>
+      {!jobDate && (
+        <div className="alert alert-error">
+          La provvigione agente resta a 0 finché non viene salvata la data del primo job confermato.
+        </div>
+      )}
 
       {/* Add payment */}
       <form onSubmit={addPayment} className="form-grid" style={{ marginBottom: 20 }}>

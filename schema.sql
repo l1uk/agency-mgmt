@@ -11,9 +11,21 @@
 create table if not exists schools (
   id         uuid primary key default gen_random_uuid(),
   name       text not null,
+  email      text,
+  invited_at timestamptz,
   giorgio    boolean not null default false,
   created_at timestamptz default now()
 );
+
+alter table schools
+  add column if not exists email text;
+
+alter table schools
+  add column if not exists invited_at timestamptz;
+
+create unique index if not exists schools_email_unique_idx
+  on schools (lower(email))
+  where email is not null;
 
 create table if not exists school_commission_rules (
   id             uuid primary key default gen_random_uuid(),
@@ -26,10 +38,30 @@ create table if not exists school_commission_rules (
 create table if not exists agents (
   id                       uuid primary key default gen_random_uuid(),
   name                     text not null,
+  email                    text,
+  invited_at               timestamptz,
+  is_giorgio_agent         boolean not null default false,
   commission_pct_exclusive numeric(5,2) not null default 10,
   commission_pct_open      numeric(5,2) not null default 7,
   created_at               timestamptz default now()
 );
+
+alter table agents
+  add column if not exists email text;
+
+alter table agents
+  add column if not exists invited_at timestamptz;
+
+alter table agents
+  add column if not exists is_giorgio_agent boolean not null default false;
+
+create unique index if not exists agents_email_unique_idx
+  on agents (lower(email))
+  where email is not null;
+
+create unique index if not exists agents_single_giorgio_agent_idx
+  on agents (is_giorgio_agent)
+  where is_giorgio_agent = true;
 
 create table if not exists models (
   id         uuid primary key default gen_random_uuid(),
@@ -52,12 +84,49 @@ create table if not exists contracts (
   start_date       date not null,
   end_date         date not null,
   exclusive        boolean not null default true,
-  status           text check (status in ('active','expiring','renewed','expired','cancelled'))
+  status           text check (status in ('active','expiring','expired','cancelled'))
                    default 'active',
   first_job_date   date,
   renewed_at       timestamptz,
   created_at       timestamptz default now()
 );
+
+create table if not exists app_settings (
+  id                        boolean primary key default true check (id = true),
+  agency_notification_email text,
+  created_at                timestamptz default now(),
+  updated_at                timestamptz default now()
+);
+
+insert into app_settings (id)
+values (true)
+on conflict (id) do nothing;
+
+create table if not exists contract_notification_log (
+  id                 uuid primary key default gen_random_uuid(),
+  contract_id        uuid references contracts(id) not null,
+  notification_type  text not null check (notification_type in ('expiry_warning', 'renewal_confirmation')),
+  contract_end_date  date not null,
+  sent_to            text not null,
+  provider_message_id text,
+  metadata           jsonb not null default '{}'::jsonb,
+  sent_at            timestamptz not null default now(),
+  created_at         timestamptz default now(),
+  unique (contract_id, notification_type, contract_end_date)
+);
+
+update contracts
+set status = case
+  when end_date < current_date then 'expired'
+  else 'active'
+end
+where status = 'renewed';
+
+alter table contracts drop constraint if exists contracts_status_check;
+
+alter table contracts
+  add constraint contracts_status_check
+  check (status in ('active','expiring','expired','cancelled'));
 
 create table if not exists payments (
   id          uuid primary key default gen_random_uuid(),
@@ -67,6 +136,49 @@ create table if not exists payments (
   notes       text,
   created_at  timestamptz default now()
 );
+
+
+-- ================================================================
+-- STEP 1B — GUARD RAILS SU INCASSI / STATO CONTRATTO
+-- ================================================================
+
+create or replace function validate_payment_contract_state()
+returns trigger language plpgsql as $$
+declare
+  v_status   text;
+  v_end_date date;
+begin
+  select status, end_date
+    into v_status, v_end_date
+  from contracts
+  where id = new.contract_id;
+
+  if not found then
+    raise exception 'Contract % not found', new.contract_id;
+  end if;
+
+  if v_status in ('expired', 'cancelled') then
+    raise exception 'Cannot record payments on % contracts', v_status;
+  end if;
+
+  if v_end_date < current_date then
+    raise exception 'Cannot record payments on expired contracts';
+  end if;
+
+  if new.paid_at > v_end_date then
+    raise exception 'Payment date cannot be after contract end date';
+  end if;
+
+  return new;
+end;
+$$;
+
+drop trigger if exists payments_validate_contract_state on payments;
+
+create trigger payments_validate_contract_state
+before insert on payments
+for each row
+execute function validate_payment_contract_state();
 
 
 -- ================================================================
@@ -154,6 +266,7 @@ select
   s.giorgio        as school_has_giorgio,
   m.agent_id,
   ag.name          as agent_name,
+  ag.is_giorgio_agent as agent_is_giorgio_agent,
 
   months_since_first_payment(m.id, py.paid_at) as rel_month_from_first_payment,
   total_paid_by_model(m.id, py.paid_at)        as cumulative_paid,
@@ -293,6 +406,29 @@ where c.status in ('active','expiring')
   and (c.end_date - current_date) <= 60
 order by c.end_date asc;
 
+drop view if exists contracts_due_for_expiry_notification;
+
+create view contracts_due_for_expiry_notification as
+select
+  ce.id as contract_id,
+  ce.client_name,
+  ce.start_date,
+  ce.end_date,
+  ce.status,
+  ce.model_name,
+  ce.days_remaining,
+  ce.expiry_level,
+  s.agency_notification_email
+from contracts_expiring ce
+cross join app_settings s
+left join contract_notification_log nl
+  on nl.contract_id = ce.id
+ and nl.notification_type = 'expiry_warning'
+ and nl.contract_end_date = ce.end_date
+where ce.days_remaining >= 0
+  and s.agency_notification_email is not null
+  and nl.id is null;
+
 
 -- ================================================================
 -- STEP 5 — FUNZIONE AGGIORNAMENTO STATI CONTRATTI
@@ -302,7 +438,9 @@ create or replace function update_expiring_contracts()
 returns void language plpgsql as $$
 begin
   update contracts set status = 'expiring'
-  where status = 'active' and (end_date - current_date) <= 60;
+  where status = 'active'
+    and end_date >= current_date
+    and (end_date - current_date) <= 60;
 
   update contracts set status = 'expired'
   where status in ('active','expiring') and end_date < current_date;
@@ -319,6 +457,8 @@ alter table school_commission_rules  enable row level security;
 alter table agents                   enable row level security;
 alter table models                   enable row level security;
 alter table contracts                enable row level security;
+alter table app_settings             enable row level security;
+alter table contract_notification_log enable row level security;
 alter table payments                 enable row level security;
 
 -- drop tutte le policy esistenti (sicuro su db vuoto)
@@ -327,7 +467,7 @@ do $$ declare r record; begin
     select policyname, tablename from pg_policies
     where tablename in (
       'schools','school_commission_rules','agents',
-      'models','contracts','payments'
+      'models','contracts','app_settings','contract_notification_log','payments'
     )
   loop
     execute format('drop policy if exists %I on %I', r.policyname, r.tablename);
@@ -351,6 +491,8 @@ create policy "agency_all" on school_commission_rules for all using (auth_role()
 create policy "agency_all" on agents                  for all using (auth_role() = 'agency');
 create policy "agency_all" on models                  for all using (auth_role() = 'agency');
 create policy "agency_all" on contracts               for all using (auth_role() = 'agency');
+create policy "agency_all" on app_settings            for all using (auth_role() = 'agency');
+create policy "agency_all" on contract_notification_log for all using (auth_role() = 'agency');
 create policy "agency_all" on payments                for all using (auth_role() = 'agency');
 
 -- scuola: sola lettura sui propri dati

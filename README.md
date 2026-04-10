@@ -60,6 +60,85 @@ Su vercel.com → Import → seleziona il repo → aggiungi le 2 env vars → De
 
 Ogni `git push` su `main` → rideploy automatico.
 
+## Notifiche email contratti
+
+Il progetto include ora due Supabase Edge Functions:
+
+- `send-contract-expiry-notifications`
+- `send-contract-renewal-confirmation`
+
+Configurazione minima necessaria in Supabase:
+
+1. Esegui l'ultima versione di `schema.sql`
+2. Imposta i secrets delle Edge Functions:
+   - `SUPABASE_URL`
+   - `SUPABASE_SERVICE_ROLE_KEY`
+   - `EDGE_SUPABASE_ANON_KEY`
+   - `RESEND_API_KEY`
+   - `EMAIL_FROM`
+3. Inserisci l'email dell'agenzia in `app_settings.agency_notification_email`
+4. Pubblica le functions in `supabase/functions/`
+
+Nota:
+- Le email di rinnovo vengono inviate quando l'agenzia conferma il rinnovo dall'app.
+- Le email di scadenza vengono invocate dall'app in modo opportunistico dalla dashboard e sono deduplicate tramite `contract_notification_log`.
+- Per invio automatico anche senza accesso alla dashboard, va aggiunto un job schedulato Supabase Cron o un scheduler esterno che chiami `send-contract-expiry-notifications`.
+
+## Invito account agente
+
+Il progetto include anche la Edge Function:
+
+- `invite-agent-account`
+
+Configurazione minima necessaria in Supabase:
+
+1. Esegui l'ultima versione di `schema.sql`
+2. Imposta i secrets:
+   - `SUPABASE_URL`
+   - `SUPABASE_SERVICE_ROLE_KEY`
+   - `EDGE_SUPABASE_ANON_KEY`
+   - `AGENT_INVITE_REDIRECT_TO` opzionale
+   - `RESEND_API_KEY` per il reinvio invito su utenti gia esistenti
+   - `EMAIL_FROM` per il reinvio invito su utenti gia esistenti
+3. Pubblica `supabase/functions/invite-agent-account`
+
+Flusso:
+- L'agenzia crea l'agente con email dall'app
+- L'agenzia clicca `Invita`
+- Supabase invia l'email di attivazione/account setup
+- L'utente completa la password e accede come `agent`
+
+Nota:
+- Il ruolo viene assegnato via `user_metadata = { role: 'agent', agent_id: ... }`
+- Le policy RLS e il portale agente esistenti continuano a funzionare senza altre modifiche
+- Il primo invito usa `inviteUserByEmail()`. Il reinvio invito per utenti gia creati usa un recovery link inviato via email provider custom.
+
+## Invito account scuola
+
+Il progetto include anche la Edge Function:
+
+- `invite-school-account`
+
+Configurazione minima necessaria in Supabase:
+
+1. Esegui l'ultima versione di `schema.sql`
+2. Imposta i secrets:
+   - `SUPABASE_URL`
+   - `SUPABASE_SERVICE_ROLE_KEY`
+   - `EDGE_SUPABASE_ANON_KEY`
+   - `SCHOOL_INVITE_REDIRECT_TO` opzionale
+3. Pubblica `supabase/functions/invite-school-account`
+
+Flusso:
+- L'agenzia crea la scuola con email dall'app
+- L'agenzia clicca `Invita`
+- Supabase invia l'email di attivazione/account setup
+- L'utente completa la password e accede come `school`
+
+Nota:
+- Il ruolo viene assegnato via `user_metadata = { role: 'school', school_id: ... }`
+- Le policy RLS e il portale scuola esistenti continuano a funzionare senza altre modifiche
+
 ## Struttura
 
 ```

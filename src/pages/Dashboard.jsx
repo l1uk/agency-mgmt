@@ -6,26 +6,35 @@ const fmt = n => '€' + parseFloat(n || 0).toLocaleString('it-IT', { minimumFra
 export default function Dashboard() {
   const [stats, setStats]     = useState(null)
   const [recent, setRecent]   = useState([])
+  const [expiring, setExpiring] = useState([])
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
     async function load() {
-      const [{ data: comms }, { data: contracts }] = await Promise.all([
-        supabase.from('contract_commissions').select('*'),
+      await supabase.rpc('update_expiring_contracts')
+
+      const [{ data: payments }, { data: contracts }, { data: expiringContracts }] = await Promise.all([
+        supabase.from('payment_commissions').select('contract_id, model_name, amount, hunt_models_net'),
         supabase
           .from('contracts')
-          .select('*, models(first_name, last_name)')
+          .select('id, client_name, reference_amount, start_date, end_date, status, models(first_name, last_name)')
           .order('created_at', { ascending: false })
           .limit(6),
+        supabase
+          .from('contracts_expiring')
+          .select('*')
+          .order('end_date', { ascending: true })
+          .limit(5),
       ])
 
-      const active    = comms?.filter(r => r.status === 'active').length ?? 0
-      const volume    = comms?.reduce((s, r) => s + parseFloat(r.total_amount || 0), 0) ?? 0
-      const agency    = comms?.reduce((s, r) => s + parseFloat(r.agency_amount || 0), 0) ?? 0
-      const models_n  = new Set(comms?.map(r => r.model_name)).size
+      const active    = contracts?.filter(r => ['active', 'expiring', 'renewed'].includes(r.status)).length ?? 0
+      const volume    = payments?.reduce((s, r) => s + parseFloat(r.amount || 0), 0) ?? 0
+      const agency    = payments?.reduce((s, r) => s + parseFloat(r.hunt_models_net || 0), 0) ?? 0
+      const models_n  = new Set(payments?.map(r => r.model_name)).size
 
       setStats({ active, volume, agency, models_n })
       setRecent(contracts ?? [])
+      setExpiring(expiringContracts ?? [])
       setLoading(false)
     }
     load()
@@ -39,6 +48,12 @@ export default function Dashboard() {
         <h2>Dashboard</h2>
         <p>Panoramica generale dell'agenzia</p>
       </div>
+
+      {expiring.length > 0 && (
+        <div className="alert alert-error" style={{ marginBottom: 20 }}>
+          ⚠ {expiring.length} contratt{expiring.length === 1 ? 'o' : 'i'} in scadenza nei prossimi 60 giorni.
+        </div>
+      )}
 
       <div className="stats-grid">
         <div className="stat-card">
@@ -70,7 +85,7 @@ export default function Dashboard() {
                   <tr>
                     <th>Modello</th>
                     <th>Cliente</th>
-                    <th>Importo</th>
+                    <th>Importo rif.</th>
                     <th>Periodo</th>
                     <th>Stato</th>
                   </tr>
@@ -80,7 +95,7 @@ export default function Dashboard() {
                     <tr key={r.id}>
                       <td>{r.models?.first_name} {r.models?.last_name}</td>
                       <td>{r.client_name}</td>
-                      <td className="mono">{fmt(r.total_amount)}</td>
+                      <td className="mono">{r.reference_amount == null ? '—' : fmt(r.reference_amount)}</td>
                       <td style={{ fontSize: 13, color: 'var(--text-2)' }}>
                         {r.start_date} → {r.end_date}
                       </td>

@@ -10,6 +10,7 @@ import Schools from './pages/Schools'
 import Agents from './pages/Agents'
 import SchoolView from './pages/SchoolView'
 import AgentView from './pages/AgentView'
+import SetPassword from './pages/SetPassword'
 
 function PrivateRoute({ children, requireRole }) {
   const { user, role, loading } = useAuth()
@@ -26,6 +27,7 @@ export default function App() {
     <BrowserRouter>
       <Routes>
         <Route path="/login" element={<Login />} />
+        <Route path="/set-password" element={<SetPassword />} />
 
         <Route path="/" element={<PrivateRoute requireRole="agency"><Layout /></PrivateRoute>}>
           <Route index            element={<Dashboard />} />

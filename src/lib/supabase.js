@@ -17,3 +17,48 @@ if (!url || !key) {
 }
 
 export const supabase = createClient(url, key)
+export const supabaseUrl = url
+export const supabaseAnonKey = key
+
+export async function getFreshAccessToken() {
+  let { data: sessionData, error } = await supabase.auth.getSession()
+  if (error) throw error
+
+  const session = sessionData.session
+  const expiresAtMs = (session?.expires_at ?? 0) * 1000
+  const isExpiredOrCloseToExpiry = !session?.access_token || expiresAtMs <= Date.now() + 60_000
+
+  if (isExpiredOrCloseToExpiry) {
+    const { data: refreshed, error: refreshError } = await supabase.auth.refreshSession()
+    if (refreshError) throw refreshError
+    return refreshed.session?.access_token ?? null
+  }
+
+  return session.access_token
+}
+
+export async function invokeEdgeFunction(name, { accessToken, body } = {}) {
+  const res = await fetch(`${url}/functions/v1/${name}`, {
+    method: 'POST',
+    headers: {
+      apikey: key,
+      Authorization: `Bearer ${accessToken}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(body ?? {}),
+  })
+
+  let data = null
+  try {
+    data = await res.json()
+  } catch {
+    data = null
+  }
+
+  if (!res.ok) {
+    const message = data?.error ?? `Edge function error: ${res.status}`
+    return { data, error: new Error(message) }
+  }
+
+  return { data, error: null }
+}

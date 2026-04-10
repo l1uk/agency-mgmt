@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
-import { supabase } from '../lib/supabase'
+import { supabase, invokeEdgeFunction, getFreshAccessToken } from '../lib/supabase'
 
-const emptySchool = { name: '', giorgio: false }
+const emptySchool = { name: '', email: '', giorgio: false }
 const emptyRule   = { school_id: '', min_months: '', max_months: '', commission_pct: '' }
 
 export default function Schools() {
@@ -15,7 +15,7 @@ export default function Schools() {
 
   async function load() {
     const [{ data: s }, { data: r }] = await Promise.all([
-      supabase.from('schools').select('id, name, giorgio').order('name'),
+      supabase.from('schools').select('id, name, email, invited_at, giorgio').order('name'),
       supabase.from('school_commission_rules').select('*').order('min_months'),
     ])
     setSchools(s ?? [])
@@ -33,7 +33,10 @@ export default function Schools() {
   const addSchool = async (e) => {
     e.preventDefault()
     if (!sForm.name) return
-    const { error } = await supabase.from('schools').insert({ name: sForm.name, giorgio: sForm.giorgio })
+    if (sForm.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(sForm.email)) {
+      flash('error', 'Inserisci un indirizzo email valido.'); return
+    }
+    const { error } = await supabase.from('schools').insert({ name: sForm.name, email: sForm.email || null, giorgio: sForm.giorgio })
     if (error) { flash('error', error.message); return }
     flash('success', 'Scuola aggiunta.')
     setSForm(emptySchool)
@@ -43,7 +46,10 @@ export default function Schools() {
   const saveEditSchool = async (e) => {
     e.preventDefault()
     if (!sForm.name) return
-    const { error } = await supabase.from('schools').update({ name: sForm.name, giorgio: sForm.giorgio }).eq('id', editingS)
+    if (sForm.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(sForm.email)) {
+      flash('error', 'Inserisci un indirizzo email valido.'); return
+    }
+    const { error } = await supabase.from('schools').update({ name: sForm.name, email: sForm.email || null, giorgio: sForm.giorgio }).eq('id', editingS)
     if (error) { flash('error', error.message); return }
     flash('success', 'Scuola aggiornata.')
     setEditingS(null)
@@ -89,6 +95,42 @@ export default function Schools() {
     load()
   }
 
+  const inviteSchool = async (school) => {
+    if (!school.email) {
+      flash('error', "Inserisci prima l'email della scuola, poi salva.")
+      return
+    }
+
+    let accessToken = null
+    try {
+      accessToken = await getFreshAccessToken()
+    } catch {
+      accessToken = null
+    }
+
+    if (!accessToken) {
+      flash('error', 'Sessione non valida. Esci e rientra prima di inviare l’invito.')
+      return
+    }
+
+    const { data, error } = await invokeEdgeFunction('invite-school-account', {
+      accessToken,
+      body: { schoolId: school.id },
+    })
+
+    if (error || !data?.ok) {
+      flash('error', data?.error ?? error?.message ?? "Invito scuola non riuscito.")
+      return
+    }
+
+    if (data.mode === 'relinked_existing_user') {
+      flash('success', `Account esistente ricollegato a ${school.email}.`)
+    } else {
+      flash('success', `Invito inviato a ${school.email}.`)
+    }
+    load()
+  }
+
   if (loading) return <div className="loading">Caricamento...</div>
 
   return (
@@ -105,11 +147,22 @@ export default function Schools() {
         <div className="card-title">{editingS ? 'Modifica scuola' : 'Nuova scuola'}</div>
         <form
           onSubmit={editingS ? saveEditSchool : addSchool}
-          style={{ display: 'flex', gap: 12, alignItems: 'flex-end' }}
+          className="form-grid"
         >
-          <div className="field" style={{ flex: 1, marginBottom: 0 }}>
-            <label>Nome scuola *</label>
-            <input value={sForm.name} onChange={e => setSForm({ name: e.target.value })} placeholder="Elite Model School" />
+          <div className="form-row-2">
+            <div className="field" style={{ marginBottom: 0 }}>
+              <label>Nome scuola *</label>
+              <input value={sForm.name} onChange={e => setSForm(f => ({ ...f, name: e.target.value }))} placeholder="Elite Model School" />
+            </div>
+            <div className="field" style={{ marginBottom: 0 }}>
+              <label>Email accesso</label>
+              <input
+                type="email"
+                value={sForm.email}
+                onChange={e => setSForm(f => ({ ...f, email: e.target.value }))}
+                placeholder="scuola@example.it"
+              />
+            </div>
           </div>
           <div style={{display:'flex',alignItems:'center',gap:8}}>
             <input type="checkbox" id="giorgio-toggle" checked={sForm.giorgio}
@@ -119,10 +172,12 @@ export default function Schools() {
               Accordo Giorgio (25% del residuo agenzia)
             </label>
           </div>
-          <button type="submit" className="btn btn-primary">{editingS ? 'Salva' : '+ Aggiungi'}</button>
-          {editingS && (
-            <button type="button" className="btn btn-ghost" onClick={() => { setEditingS(null); setSForm(emptySchool) }}>Annulla</button>
-          )}
+          <div style={{ display: 'flex', gap: 10 }}>
+            <button type="submit" className="btn btn-primary">{editingS ? 'Salva' : '+ Aggiungi'}</button>
+            {editingS && (
+              <button type="button" className="btn btn-ghost" onClick={() => { setEditingS(null); setSForm(emptySchool) }}>Annulla</button>
+            )}
+          </div>
         </form>
       </div>
 
@@ -180,11 +235,19 @@ export default function Schools() {
               <div style={{ display: 'flex', gap: 8 }}>
                 <button className="btn btn-ghost btn-sm" onClick={() => {
                   setEditingS(school.id)
-                  setSForm({ name: school.name, giorgio: school.giorgio ?? false })
+                  setSForm({ name: school.name, email: school.email ?? '', giorgio: school.giorgio ?? false })
                   window.scrollTo({ top: 0, behavior: 'smooth' })
                 }}>Modifica</button>
                 <button className="btn btn-danger btn-sm" onClick={() => deleteSchool(school.id)}>Elimina</button>
               </div>
+            </div>
+            <div style={{ fontSize: 13, color: 'var(--text-2)', marginBottom: 16 }}>
+              Email accesso: {school.email ?? '—'}
+              <span style={{ marginLeft: 12 }}>
+                {school.invited_at
+                  ? 'Invito gia inviato'
+                  : <button className="btn btn-ghost btn-sm" onClick={() => inviteSchool(school)}>Invita</button>}
+              </span>
             </div>
             {schoolRules.length === 0
               ? <p style={{ fontSize: 13, color: 'var(--text-3)' }}>Nessuna regola configurata.</p>
