@@ -98,8 +98,6 @@ Configurazione minima necessaria in Supabase:
    - `SUPABASE_SERVICE_ROLE_KEY`
    - `EDGE_SUPABASE_ANON_KEY`
    - `AGENT_INVITE_REDIRECT_TO` opzionale
-   - `RESEND_API_KEY` per il reinvio invito su utenti gia esistenti
-   - `EMAIL_FROM` per il reinvio invito su utenti gia esistenti
 3. Pubblica `supabase/functions/invite-agent-account`
 
 Flusso:
@@ -111,7 +109,8 @@ Flusso:
 Nota:
 - Il ruolo viene assegnato via `user_metadata = { role: 'agent', agent_id: ... }`
 - Le policy RLS e il portale agente esistenti continuano a funzionare senza altre modifiche
-- Il primo invito usa `inviteUserByEmail()`. Il reinvio invito per utenti gia creati usa un recovery link inviato via email provider custom.
+- Il primo invito usa `inviteUserByEmail()`.
+- Se l'utente auth esiste gia, la function ricollega il metadata al nuovo `agent_id` senza eliminare l'account auth.
 
 ## Invito account scuola
 

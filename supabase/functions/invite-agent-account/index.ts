@@ -1,12 +1,9 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { corsHeaders, handleCors } from '../_shared/cors.ts'
 import { requireAgencyUser } from '../_shared/auth.ts'
-import { sendEmail } from '../_shared/email.ts'
 
 const supabaseUrl = Deno.env.get('SUPABASE_URL')!
 const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
-const resendApiKey = Deno.env.get('RESEND_API_KEY')
-const emailFrom = Deno.env.get('EMAIL_FROM')
 
 const supabase = createClient(supabaseUrl, serviceRoleKey)
 
@@ -92,36 +89,6 @@ Deno.serve(async (req) => {
 
       if (relinkError) {
         return Response.json({ ok: false, error: relinkError.message }, { status: 400, headers: corsHeaders })
-      }
-
-      if (resendApiKey && emailFrom) {
-        const { data: recoveryData, error: recoveryError } = await supabase.auth.admin.generateLink({
-          type: 'recovery',
-          email: agent.email,
-          redirectTo: Deno.env.get('AGENT_INVITE_REDIRECT_TO') ?? undefined,
-        })
-
-        if (recoveryError) {
-          return Response.json({ ok: false, error: recoveryError.message }, { status: 400, headers: corsHeaders })
-        }
-
-        const actionLink = recoveryData?.properties?.action_link
-        if (!actionLink) {
-          return Response.json({ ok: false, error: 'Recovery link non generato.' }, { status: 500, headers: corsHeaders })
-        }
-
-        await sendEmail({
-          apiKey: resendApiKey,
-          from: emailFrom,
-          to: agent.email,
-          subject: 'Accesso portale agente',
-          html: `
-            <h2>Accesso portale agente</h2>
-            <p>Ciao ${agent.name},</p>
-            <p>il tuo account agente e stato collegato al nuovo profilo nel gestionale Hunt Models.</p>
-            <p><a href="${actionLink}">Accedi / imposta password</a></p>
-          `,
-        })
       }
 
       inviteMode = 'relinked_existing_user'

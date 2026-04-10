@@ -388,7 +388,8 @@ left join agents  ag  on ag.id = m.agent_id;
 -- STEP 4 — VIEW CONTRATTI IN SCADENZA
 -- ================================================================
 
-drop view if exists contracts_expiring;
+-- MODIFICA QUI: Aggiungiamo CASCADE per eliminare automaticamente le dipendenze
+drop view if exists contracts_expiring cascade;
 
 create view contracts_expiring as
 select
@@ -406,6 +407,7 @@ where c.status in ('active','expiring')
   and (c.end_date - current_date) <= 60
 order by c.end_date asc;
 
+-- Questa riga può rimanere così, o puoi rimuoverla se usi CASCADE sopra
 drop view if exists contracts_due_for_expiry_notification;
 
 create view contracts_due_for_expiry_notification as
@@ -429,7 +431,7 @@ where ce.days_remaining >= 0
   and s.agency_notification_email is not null
   and nl.id is null;
 
-
+  
 -- ================================================================
 -- STEP 5 — FUNZIONE AGGIORNAMENTO STATI CONTRATTI
 -- ================================================================

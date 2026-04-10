@@ -17,7 +17,7 @@ export default function Dashboard() {
         supabase.from('payment_commissions').select('contract_id, model_name, amount, hunt_models_net'),
         supabase
           .from('contracts')
-          .select('id, client_name, reference_amount, start_date, end_date, status, models(first_name, last_name)')
+          .select('id, client_name, start_date, end_date, status, models(first_name, last_name)')
           .order('created_at', { ascending: false })
           .limit(6),
         supabase
@@ -85,7 +85,6 @@ export default function Dashboard() {
                   <tr>
                     <th>Modello</th>
                     <th>Cliente</th>
-                    <th>Importo rif.</th>
                     <th>Periodo</th>
                     <th>Stato</th>
                   </tr>
@@ -95,7 +94,6 @@ export default function Dashboard() {
                     <tr key={r.id}>
                       <td>{r.models?.first_name} {r.models?.last_name}</td>
                       <td>{r.client_name}</td>
-                      <td className="mono">{r.reference_amount == null ? '—' : fmt(r.reference_amount)}</td>
                       <td style={{ fontSize: 13, color: 'var(--text-2)' }}>
                         {r.start_date} → {r.end_date}
                       </td>

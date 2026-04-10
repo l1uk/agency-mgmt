@@ -5,7 +5,7 @@ import Payments from './Payments'
 const fmt = n => '€' + parseFloat(n || 0).toLocaleString('it-IT', { minimumFractionDigits: 2 })
 
 const empty = {
-  model_id: '', client_name: '', reference_amount: '',
+  model_id: '', client_name: '',
   start_date: '', end_date: '', first_job_date: '', status: 'active', exclusive: 'true'
 }
 
@@ -71,7 +71,6 @@ export default function Contracts() {
     setForm({
       model_id:         c.model_id,
       client_name:      c.client_name,
-      reference_amount: c.reference_amount ? String(c.reference_amount) : '',
       start_date:       c.start_date,
       end_date:         c.end_date,
       first_job_date:   c.first_job_date ?? '',
@@ -89,7 +88,6 @@ export default function Contracts() {
     const payload = {
       model_id:         form.model_id,
       client_name:      form.client_name,
-      reference_amount: form.reference_amount ? parseFloat(form.reference_amount) : null,
       start_date:       form.start_date,
       end_date:         form.end_date,
       first_job_date:   form.first_job_date || null,
@@ -180,7 +178,7 @@ export default function Contracts() {
               <input value={form.client_name} onChange={e => set('client_name', e.target.value)} placeholder="Vogue Italia" />
             </div>
           </div>
-          <div className="form-row-3">
+          <div className="form-row-2">
             <div className="field">
               <label>Data inizio *</label>
               <input type="date" value={form.start_date} onChange={e => set('start_date', e.target.value)} />
@@ -188,11 +186,6 @@ export default function Contracts() {
             <div className="field">
               <label>Data fine * (default +2 anni)</label>
               <input type="date" value={form.end_date} onChange={e => set('end_date', e.target.value)} />
-            </div>
-            <div className="field">
-              <label>Importo di riferimento € (opzionale)</label>
-              <input type="number" step="0.01" min="0"
-                value={form.reference_amount} onChange={e => set('reference_amount', e.target.value)} placeholder="Non usato per calcoli" />
             </div>
           </div>
           <div className="field">
