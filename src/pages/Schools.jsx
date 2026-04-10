@@ -1,21 +1,22 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '../lib/supabase'
 
-const emptySchool = { name: '' }
+const emptySchool = { name: '', giorgio: false }
 const emptyRule   = { school_id: '', min_months: '', max_months: '', commission_pct: '' }
 
 export default function Schools() {
-  const [schools, setSchools] = useState([])
-  const [rules, setRules]     = useState([])
-  const [sForm, setSForm]     = useState(emptySchool)
-  const [rForm, setRForm]     = useState(emptyRule)
-  const [msg, setMsg]         = useState(null)
-  const [loading, setLoading] = useState(true)
+  const [schools, setSchools]     = useState([])
+  const [rules, setRules]         = useState([])
+  const [sForm, setSForm]         = useState(emptySchool)
+  const [rForm, setRForm]         = useState(emptyRule)
+  const [editingS, setEditingS]   = useState(null)
+  const [msg, setMsg]             = useState(null)
+  const [loading, setLoading]     = useState(true)
 
   async function load() {
     const [{ data: s }, { data: r }] = await Promise.all([
-      supabase.from('schools').select('id, name').order('name'),
-      supabase.from('school_commission_rules').select('*, schools(name)').order('min_months'),
+      supabase.from('schools').select('id, name, giorgio').order('name'),
+      supabase.from('school_commission_rules').select('*').order('min_months'),
     ])
     setSchools(s ?? [])
     setRules(r ?? [])
@@ -26,21 +27,39 @@ export default function Schools() {
 
   const flash = (type, text) => {
     setMsg({ type, text })
-    setTimeout(() => setMsg(null), 3000)
+    setTimeout(() => setMsg(null), 3500)
   }
 
   const addSchool = async (e) => {
     e.preventDefault()
     if (!sForm.name) return
-    const { error } = await supabase.from('schools').insert({ name: sForm.name })
+    const { error } = await supabase.from('schools').insert({ name: sForm.name, giorgio: sForm.giorgio })
     if (error) { flash('error', error.message); return }
     flash('success', 'Scuola aggiunta.')
     setSForm(emptySchool)
     load()
   }
 
+  const saveEditSchool = async (e) => {
+    e.preventDefault()
+    if (!sForm.name) return
+    const { error } = await supabase.from('schools').update({ name: sForm.name, giorgio: sForm.giorgio }).eq('id', editingS)
+    if (error) { flash('error', error.message); return }
+    flash('success', 'Scuola aggiornata.')
+    setEditingS(null)
+    setSForm(emptySchool)
+    load()
+  }
+
   const deleteSchool = async (id) => {
-    if (!confirm('Eliminare questa scuola? Verranno rimosse anche le sue regole provvigione.')) return
+    // Check for linked models first
+    const { data: linked } = await supabase
+      .from('models').select('id').eq('school_id', id).limit(1)
+    if (linked?.length > 0) {
+      flash('error', 'Impossibile eliminare: ci sono modelli associati a questa scuola. Riassegna prima i modelli.')
+      return
+    }
+    if (!confirm('Eliminare questa scuola e tutte le sue regole provvigione?')) return
     await supabase.from('school_commission_rules').delete().eq('school_id', id)
     await supabase.from('schools').delete().eq('id', id)
     load()
@@ -48,17 +67,16 @@ export default function Schools() {
 
   const addRule = async (e) => {
     e.preventDefault()
-    if (!rForm.school_id || !rForm.min_months || !rForm.commission_pct) {
-      flash('error', 'Compila tutti i campi obbligatori della regola.'); return
+    if (!rForm.school_id || rForm.min_months === '' || !rForm.commission_pct) {
+      flash('error', 'Compila tutti i campi obbligatori.'); return
     }
-    if (parseFloat(rForm.commission_pct) <= 0 || parseFloat(rForm.commission_pct) > 100) {
-      flash('error', 'La percentuale deve essere tra 0 e 100.'); return
-    }
+    const pct = parseFloat(rForm.commission_pct)
+    if (pct <= 0 || pct > 100) { flash('error', 'La percentuale deve essere tra 0 e 100.'); return }
     const { error } = await supabase.from('school_commission_rules').insert({
       school_id:      rForm.school_id,
       min_months:     parseInt(rForm.min_months),
-      max_months:     rForm.max_months ? parseInt(rForm.max_months) : null,
-      commission_pct: parseFloat(rForm.commission_pct),
+      max_months:     rForm.max_months !== '' ? parseInt(rForm.max_months) : null,
+      commission_pct: pct,
     })
     if (error) { flash('error', error.message); return }
     flash('success', 'Regola aggiunta.')
@@ -82,19 +100,29 @@ export default function Schools() {
 
       {msg && <div className={`alert alert-${msg.type === 'error' ? 'error' : 'success'}`}>{msg.text}</div>}
 
-      {/* Add school */}
+      {/* Add / edit school */}
       <div className="card">
-        <div className="card-title">Nuova scuola</div>
-        <form onSubmit={addSchool} style={{ display: 'flex', gap: 12, alignItems: 'flex-end' }}>
+        <div className="card-title">{editingS ? 'Modifica scuola' : 'Nuova scuola'}</div>
+        <form
+          onSubmit={editingS ? saveEditSchool : addSchool}
+          style={{ display: 'flex', gap: 12, alignItems: 'flex-end' }}
+        >
           <div className="field" style={{ flex: 1, marginBottom: 0 }}>
             <label>Nome scuola *</label>
-            <input
-              value={sForm.name}
-              onChange={e => setSForm({ name: e.target.value })}
-              placeholder="Elite Model School"
-            />
+            <input value={sForm.name} onChange={e => setSForm({ name: e.target.value })} placeholder="Elite Model School" />
           </div>
-          <button type="submit" className="btn btn-primary">+ Aggiungi</button>
+          <div style={{display:'flex',alignItems:'center',gap:8}}>
+            <input type="checkbox" id="giorgio-toggle" checked={sForm.giorgio}
+              onChange={e => setSForm(f => ({...f, giorgio: e.target.checked}))}
+              style={{width:'auto'}} />
+            <label htmlFor="giorgio-toggle" style={{margin:0,fontSize:13,color:'var(--text-2)',cursor:'pointer'}}>
+              Accordo Giorgio (25% del residuo agenzia)
+            </label>
+          </div>
+          <button type="submit" className="btn btn-primary">{editingS ? 'Salva' : '+ Aggiungi'}</button>
+          {editingS && (
+            <button type="button" className="btn btn-ghost" onClick={() => { setEditingS(null); setSForm(emptySchool) }}>Annulla</button>
+          )}
         </form>
       </div>
 
@@ -102,8 +130,7 @@ export default function Schools() {
       <div className="card">
         <div className="card-title">Nuova regola provvigione</div>
         <p style={{ fontSize: 13, color: 'var(--text-2)', marginBottom: 16 }}>
-          Definisci la percentuale dovuta alla scuola in base alla durata del contratto in mesi.
-          Lascia "mese fine" vuoto per indicare "senza limite".
+          Definisci la % dovuta alla scuola in base alla durata del contratto in mesi. Lascia "A mese" vuoto per "senza limite".
         </p>
         <form onSubmit={addRule} className="form-grid">
           <div className="form-row-2">
@@ -116,32 +143,20 @@ export default function Schools() {
             </div>
             <div className="field">
               <label>Percentuale % *</label>
-              <input
-                type="number" step="0.01" min="0" max="100"
-                value={rForm.commission_pct}
-                onChange={e => setRForm(f => ({ ...f, commission_pct: e.target.value }))}
-                placeholder="8"
-              />
+              <input type="number" step="0.01" min="0" max="100"
+                value={rForm.commission_pct} onChange={e => setRForm(f => ({ ...f, commission_pct: e.target.value }))} placeholder="8" />
             </div>
           </div>
           <div className="form-row-2">
             <div className="field">
               <label>Da mese (incluso) *</label>
-              <input
-                type="number" min="0"
-                value={rForm.min_months}
-                onChange={e => setRForm(f => ({ ...f, min_months: e.target.value }))}
-                placeholder="0"
-              />
+              <input type="number" min="0"
+                value={rForm.min_months} onChange={e => setRForm(f => ({ ...f, min_months: e.target.value }))} placeholder="0" />
             </div>
             <div className="field">
-              <label>A mese (incluso, vuoto = nessun limite)</label>
-              <input
-                type="number" min="0"
-                value={rForm.max_months}
-                onChange={e => setRForm(f => ({ ...f, max_months: e.target.value }))}
-                placeholder="6"
-              />
+              <label>A mese (incluso) — vuoto = nessun limite</label>
+              <input type="number" min="0"
+                value={rForm.max_months} onChange={e => setRForm(f => ({ ...f, max_months: e.target.value }))} placeholder="6" />
             </div>
           </div>
           <div>
@@ -150,7 +165,7 @@ export default function Schools() {
         </form>
       </div>
 
-      {/* Schools list with their rules */}
+      {/* Schools list */}
       {schools.map(school => {
         const schoolRules = rules
           .filter(r => r.school_id === school.id)
@@ -158,21 +173,25 @@ export default function Schools() {
         return (
           <div className="card" key={school.id}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-              <div className="card-title" style={{ marginBottom: 0 }}>{school.name}</div>
-              <button className="btn btn-danger btn-sm" onClick={() => deleteSchool(school.id)}>Elimina scuola</button>
+              <div style={{display:'flex',alignItems:'center',gap:8}}>
+                  <div className="card-title" style={{ marginBottom: 0 }}>{school.name}</div>
+                  {school.giorgio && <span className="badge" style={{background:'#ede7f6',color:'#5e35b1',fontSize:11}}>Giorgio 25%</span>}
+                </div>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <button className="btn btn-ghost btn-sm" onClick={() => {
+                  setEditingS(school.id)
+                  setSForm({ name: school.name, giorgio: school.giorgio ?? false })
+                  window.scrollTo({ top: 0, behavior: 'smooth' })
+                }}>Modifica</button>
+                <button className="btn btn-danger btn-sm" onClick={() => deleteSchool(school.id)}>Elimina</button>
+              </div>
             </div>
-
             {schoolRules.length === 0
               ? <p style={{ fontSize: 13, color: 'var(--text-3)' }}>Nessuna regola configurata.</p>
               : (
                 <table>
                   <thead>
-                    <tr>
-                      <th>Da mese</th>
-                      <th>A mese</th>
-                      <th>Percentuale</th>
-                      <th></th>
-                    </tr>
+                    <tr><th>Da mese</th><th>A mese</th><th>Percentuale</th><th></th></tr>
                   </thead>
                   <tbody>
                     {schoolRules.map(r => (
@@ -192,10 +211,7 @@ export default function Schools() {
           </div>
         )
       })}
-
-      {schools.length === 0 && (
-        <div className="card"><div className="empty">Nessuna scuola ancora registrata.</div></div>
-      )}
+      {schools.length === 0 && <div className="card"><div className="empty">Nessuna scuola ancora registrata.</div></div>}
     </>
   )
 }

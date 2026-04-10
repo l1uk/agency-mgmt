@@ -9,11 +9,14 @@ import Commissions from './pages/Commissions'
 import Schools from './pages/Schools'
 import Agents from './pages/Agents'
 import SchoolView from './pages/SchoolView'
+import AgentView from './pages/AgentView'
 
 function PrivateRoute({ children, requireRole }) {
   const { user, role, loading } = useAuth()
   if (loading) return <div className="loading">Caricamento...</div>
-  if (!user) return <Navigate to="/login" replace />
+  if (!user)   return <Navigate to="/login" replace />
+  if (role === 'school' && requireRole !== 'school') return <Navigate to="/school" replace />
+  if (role === 'agent'  && requireRole !== 'agent')  return <Navigate to="/agent"  replace />
   if (requireRole && role !== requireRole) return <Navigate to="/" replace />
   return children
 }
@@ -24,31 +27,17 @@ export default function App() {
       <Routes>
         <Route path="/login" element={<Login />} />
 
-        {/* Agency routes */}
-        <Route path="/" element={
-          <PrivateRoute>
-            <Layout />
-          </PrivateRoute>
-        }>
-          <Route index element={<Dashboard />} />
-          <Route path="models" element={<Models />} />
-          <Route path="contracts" element={<Contracts />} />
+        <Route path="/" element={<PrivateRoute requireRole="agency"><Layout /></PrivateRoute>}>
+          <Route index            element={<Dashboard />} />
+          <Route path="models"      element={<Models />} />
+          <Route path="contracts"   element={<Contracts />} />
           <Route path="commissions" element={<Commissions />} />
-          <Route path="schools" element={
-            <PrivateRoute requireRole="agency"><Schools /></PrivateRoute>
-          } />
-          <Route path="agents" element={
-            <PrivateRoute requireRole="agency"><Agents /></PrivateRoute>
-          } />
+          <Route path="schools"     element={<Schools />} />
+          <Route path="agents"      element={<Agents />} />
         </Route>
 
-        {/* School-only view */}
-        <Route path="/school" element={
-          <PrivateRoute requireRole="school">
-            <SchoolView />
-          </PrivateRoute>
-        } />
-
+        <Route path="/school" element={<PrivateRoute requireRole="school"><SchoolView /></PrivateRoute>} />
+        <Route path="/agent"  element={<PrivateRoute requireRole="agent"><AgentView /></PrivateRoute>} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </BrowserRouter>
