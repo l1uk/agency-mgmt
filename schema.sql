@@ -331,7 +331,7 @@ select
       end
   ) / 100, 2) as hunt_models_gross,
 
-  -- quota giorgio (25% del residuo, solo modelli MD con giorgio=true)
+  -- quota giorgio (20% del residuo, solo modelli MD con giorgio=true)
   case when m.school_id is not null and coalesce(s.giorgio, false) = true
     then round(
       round(py.amount * (
@@ -339,7 +339,7 @@ select
           months_since_first_payment(m.id, py.paid_at),
           total_paid_by_model(m.id, py.paid_at)
         )
-      ) / 100, 2) * 0.25
+      ) / 100, 2) * 0.20
     , 2)
     else 0
   end as giorgio_amount,
@@ -371,7 +371,7 @@ select
           months_since_first_payment(m.id, py.paid_at),
           total_paid_by_model(m.id, py.paid_at)
         )
-      ) / 100, 2) * 0.25
+      ) / 100, 2) * 0.20
     , 2)
     else 0
   end
@@ -607,6 +607,6 @@ create policy "agent_read" on payments
 -- from contracts c join models m on m.id = c.model_id
 -- where m.last_name = 'Ferrari';
 --
--- -- verifica: deve mostrare md_pct=8, giorgio_amount=184, hunt_models_net=552
+-- -- verifica: deve mostrare md_pct=8, giorgio_amount=147.2, hunt_models_net=588.8
 -- select model_name, amount, md_pct, md_amount, giorgio_amount, hunt_models_net
 -- from payment_commissions;

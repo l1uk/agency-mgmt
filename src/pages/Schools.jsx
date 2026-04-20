@@ -169,7 +169,7 @@ export default function Schools() {
               onChange={e => setSForm(f => ({...f, giorgio: e.target.checked}))}
               style={{width:'auto'}} />
             <label htmlFor="giorgio-toggle" style={{margin:0,fontSize:13,color:'var(--text-2)',cursor:'pointer'}}>
-              Accordo Giorgio (25% del residuo agenzia)
+              Accordo Giorgio (20% del residuo agenzia)
             </label>
           </div>
           <div style={{ display: 'flex', gap: 10 }}>
@@ -230,7 +230,7 @@ export default function Schools() {
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
               <div style={{display:'flex',alignItems:'center',gap:8}}>
                   <div className="card-title" style={{ marginBottom: 0 }}>{school.name}</div>
-                  {school.giorgio && <span className="badge" style={{background:'#ede7f6',color:'#5e35b1',fontSize:11}}>Giorgio 25%</span>}
+                  {school.giorgio && <span className="badge" style={{background:'#ede7f6',color:'#5e35b1',fontSize:11}}>Giorgio 20%</span>}
                 </div>
               <div style={{ display: 'flex', gap: 8 }}>
                 <button className="btn btn-ghost btn-sm" onClick={() => {

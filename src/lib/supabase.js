@@ -38,13 +38,18 @@ export async function getFreshAccessToken() {
 }
 
 export async function invokeEdgeFunction(name, { accessToken, body } = {}) {
+  const headers = {
+    apikey: key,
+    'Content-Type': 'application/json',
+  }
+  
+  if (accessToken) {
+    headers.Authorization = `Bearer ${accessToken}`
+  }
+  
   const res = await fetch(`${url}/functions/v1/${name}`, {
     method: 'POST',
-    headers: {
-      apikey: key,
-      Authorization: `Bearer ${accessToken}`,
-      'Content-Type': 'application/json',
-    },
+    headers,
     body: JSON.stringify(body ?? {}),
   })
 

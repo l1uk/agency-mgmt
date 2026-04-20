@@ -111,13 +111,13 @@ Calcolo su ogni incasso di un modello MD:
 
 -   Si calcola prima la quota MD (secondo la fascia di periodo).
 
--   Sul residuo che rimane a Hunt Models, Giorgio prende il 25%.
+-   Sul residuo che rimane a Hunt Models, Giorgio prende il 20%.
 
--   Hunt Models incassa il restante 75% del residuo.
+-   Hunt Models incassa il restante 80% del residuo.
 
 **Esempio:** incasso €1.000, periodo mese 3 (fascia 8%). MD prende €80.
-Residuo Hunt Models: €920. Giorgio prende 25% di €920 = €230. Hunt
-Models incassa €690.
+Residuo Hunt Models: €920. Giorgio prende 20% di €920 = €184. Hunt
+Models incassa €736.
 
 ## **Provvigioni agente**
 

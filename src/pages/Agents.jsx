@@ -47,10 +47,35 @@ export default function Agents() {
   const handleSubmit = async (e) => {
     e.preventDefault()
     if (!form.name) { flash('error', "Inserisci il nome dell'agente."); return }
-    if (form.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email)) {
+    const normalizedEmail = form.email.trim().toLowerCase()
+
+    if (normalizedEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizedEmail)) {
       flash('error', 'Inserisci un indirizzo email valido.')
       return
     }
+
+    if (normalizedEmail) {
+      const duplicateQuery = supabase
+        .from('agents')
+        .select('id, name, email')
+        .ilike('email', normalizedEmail)
+        .limit(1)
+
+      const { data: duplicate, error: duplicateError } = editing
+        ? await duplicateQuery.neq('id', editing)
+        : await duplicateQuery
+
+      if (duplicateError) {
+        flash('error', duplicateError.message)
+        return
+      }
+
+      if (duplicate?.length) {
+        flash('error', 'Esiste gia un agente con questa email.')
+        return
+      }
+    }
+
     const excl = parseFloat(form.commission_pct_exclusive)
     const open = parseFloat(form.commission_pct_open)
     if (isNaN(excl) || excl < 0 || excl > 100) { flash('error', 'Percentuale esclusiva non valida.'); return }
@@ -76,7 +101,7 @@ export default function Agents() {
     setSaving(true)
     const payload = {
       name: form.name,
-      email: form.email || null,
+      email: normalizedEmail || null,
       is_giorgio_agent: !!form.is_giorgio_agent,
       commission_pct_exclusive: excl,
       commission_pct_open: open,
@@ -147,7 +172,11 @@ export default function Agents() {
       return
     }
     if (!confirm('Eliminare questo agente?')) return
-    await supabase.from('agents').delete().eq('id', id)
+    const { error } = await supabase.from('agents').delete().eq('id', id)
+    if (error) {
+      flash('error', error.message)
+      return
+    }
     load()
   }
 

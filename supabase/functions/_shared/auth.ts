@@ -10,7 +10,12 @@ export async function requireAgencyUser(req: Request) {
   const authHeader = req.headers.get('authorization') ?? ''
   const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : null
 
+  console.log('Auth check - header present:', !!authHeader)
+  console.log('Auth check - token present:', !!token)
+  console.log('Auth check - anonKey present:', !!anonKey)
+
   if (!token) {
+    console.log('Auth failed: Missing bearer token')
     return {
       ok: false,
       response: Response.json(
@@ -21,7 +26,10 @@ export async function requireAgencyUser(req: Request) {
   }
 
   const { data, error } = await authClient.auth.getUser(token)
+  console.log('Auth getUser - error:', error?.message, 'user:', !!data?.user)
+  
   if (error || !data.user) {
+    console.log('Auth failed: Invalid token or user not found')
     return {
       ok: false,
       response: Response.json(

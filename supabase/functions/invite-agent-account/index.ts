@@ -12,6 +12,31 @@ function isExistingUserInviteError(message: string) {
   return normalized.includes('already') || normalized.includes('exists') || normalized.includes('registered')
 }
 
+function isValidEmail(email: string) {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)
+}
+
+function getValidRedirectUrlFromEnv(envKey: string) {
+  const raw = Deno.env.get(envKey)
+  if (!raw) return undefined
+
+  try {
+    const parsed = new URL(raw)
+    return parsed.toString()
+  } catch {
+    console.warn(`Invalid redirect URL in ${envKey}: ${raw}`)
+    return undefined
+  }
+}
+
+function formatAuthAdminError(error: unknown) {
+  const err = error as { message?: string; code?: string; status?: number }
+  const message = err?.message ?? 'Unknown auth admin error'
+  const code = err?.code ?? 'unknown_code'
+  const status = err?.status ?? 400
+  return { message, code, status }
+}
+
 async function findAuthUserByEmail(email: string) {
   let page = 1
 
@@ -56,17 +81,32 @@ Deno.serve(async (req) => {
       return Response.json({ ok: false, error: 'Agent email not configured' }, { status: 400, headers: corsHeaders })
     }
 
+    if (!isValidEmail(agent.email)) {
+      return Response.json({ ok: false, error: `Invalid agent email: ${agent.email}` }, { status: 400, headers: corsHeaders })
+    }
+
+    const redirectTo = getValidRedirectUrlFromEnv('AGENT_INVITE_REDIRECT_TO')
+
     const { error: inviteError } = await supabase.auth.admin.inviteUserByEmail(agent.email, {
       data: {
         role: 'agent',
         agent_id: agent.id,
       },
-      redirectTo: Deno.env.get('AGENT_INVITE_REDIRECT_TO') ?? undefined,
+      redirectTo,
     })
 
     if (inviteError) {
-      if (!isExistingUserInviteError(inviteError.message)) {
-        return Response.json({ ok: false, error: inviteError.message }, { status: 400, headers: corsHeaders })
+      const details = formatAuthAdminError(inviteError)
+      const isExisting =
+        isExistingUserInviteError(details.message) ||
+        details.code.toLowerCase().includes('exists') ||
+        details.code.toLowerCase().includes('already')
+
+      if (!isExisting) {
+        return Response.json(
+          { ok: false, error: `${details.message} (code: ${details.code}, status: ${details.status})` },
+          { status: 400, headers: corsHeaders },
+        )
       }
 
       const existingUser = await findAuthUserByEmail(agent.email)
