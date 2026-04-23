@@ -16,14 +16,15 @@ export default function SetPassword() {
   const [success, setSuccess] = useState('')
   const [saving, setSaving] = useState(false)
 
-  useEffect(() => {
-    if (!loading && !user) navigate('/login', { replace: true })
-  }, [loading, user, navigate])
-
   const handleSubmit = async (e) => {
     e.preventDefault()
     setError('')
     setSuccess('')
+
+    if (!user) {
+      setError('Link non valido o scaduto. Richiedi un nuovo invito e riapri il link ricevuto via email.')
+      return
+    }
 
     if (password.length < 8) {
       setError('La password deve contenere almeno 8 caratteri.')
@@ -60,6 +61,11 @@ export default function SetPassword() {
 
         {error && <div className="alert alert-error">{error}</div>}
         {success && <div className="alert alert-success">{success}</div>}
+        {!user && !success && (
+          <div className="alert alert-error">
+            Sessione invito non trovata. Apri il link di invito piu recente oppure chiedi un nuovo invito.
+          </div>
+        )}
 
         <form onSubmit={handleSubmit} className="form-grid">
           <div className="field">
@@ -83,7 +89,7 @@ export default function SetPassword() {
               required
             />
           </div>
-          <button type="submit" className="btn btn-primary" disabled={saving}>
+          <button type="submit" className="btn btn-primary" disabled={saving || !user}>
             {saving ? 'Salvataggio...' : 'Salva password'}
           </button>
         </form>
