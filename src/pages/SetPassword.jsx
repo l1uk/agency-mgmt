@@ -21,11 +21,6 @@ export default function SetPassword() {
     setError('')
     setSuccess('')
 
-    if (!user) {
-      setError('Link non valido o scaduto. Richiedi un nuovo invito e riapri il link ricevuto via email.')
-      return
-    }
-
     if (password.length < 8) {
       setError('La password deve contenere almeno 8 caratteri.')
       return
@@ -61,11 +56,6 @@ export default function SetPassword() {
 
         {error && <div className="alert alert-error">{error}</div>}
         {success && <div className="alert alert-success">{success}</div>}
-        {!user && !success && (
-          <div className="alert alert-error">
-            Sessione invito non trovata. Apri il link di invito piu recente oppure chiedi un nuovo invito.
-          </div>
-        )}
 
         <form onSubmit={handleSubmit} className="form-grid">
           <div className="field">
@@ -89,7 +79,7 @@ export default function SetPassword() {
               required
             />
           </div>
-          <button type="submit" className="btn btn-primary" disabled={saving || !user}>
+          <button type="submit" className="btn btn-primary" disabled={saving}>
             {saving ? 'Salvataggio...' : 'Salva password'}
           </button>
         </form>
