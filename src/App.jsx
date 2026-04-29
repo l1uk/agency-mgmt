@@ -1,4 +1,4 @@
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
+import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom'
 import { useAuth } from './hooks/useAuth'
 import Layout from './components/Layout'
 import Login from './pages/Login'
@@ -11,6 +11,28 @@ import Agents from './pages/Agents'
 import SchoolView from './pages/SchoolView'
 import AgentView from './pages/AgentView'
 import SetPassword from './pages/SetPassword'
+
+function InviteRecoveryRedirect() {
+  const location = useLocation()
+  const query = new URLSearchParams(location.search)
+  const hashRaw = window.location.hash.startsWith('#')
+    ? window.location.hash.slice(1)
+    : window.location.hash
+  const hash = new URLSearchParams(hashRaw)
+
+  const type = query.get('type') || hash.get('type')
+  const isInviteOrRecovery = type === 'invite' || type === 'recovery'
+  const hasAuthTokens = hash.has('access_token') || hash.has('refresh_token')
+  const shouldRedirectToSetPassword =
+    location.pathname !== '/set-password' &&
+    (isInviteOrRecovery || hasAuthTokens)
+
+  if (shouldRedirectToSetPassword) {
+    return <Navigate to={`/set-password${location.search}${location.hash}`} replace />
+  }
+
+  return null
+}
 
 function PrivateRoute({ children, requireRole }) {
   const { user, role, loading } = useAuth()
@@ -25,6 +47,7 @@ function PrivateRoute({ children, requireRole }) {
 export default function App() {
   return (
     <BrowserRouter>
+      <InviteRecoveryRedirect />
       <Routes>
         <Route path="/login" element={<Login />} />
         <Route path="/set-password" element={<SetPassword />} />
