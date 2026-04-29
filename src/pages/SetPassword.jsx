@@ -16,10 +16,6 @@ export default function SetPassword() {
   const [success, setSuccess] = useState('')
   const [saving, setSaving] = useState(false)
 
-  useEffect(() => {
-    if (!loading && !user) navigate('/login', { replace: true })
-  }, [loading, user, navigate])
-
   const handleSubmit = async (e) => {
     e.preventDefault()
     setError('')
