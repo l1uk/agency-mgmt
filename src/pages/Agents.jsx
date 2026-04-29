@@ -4,7 +4,6 @@ import { supabase, invokeEdgeFunction, getFreshAccessToken } from '../lib/supaba
 const empty = {
   name: '',
   email: '',
-  is_giorgio_agent: false,
   commission_pct_exclusive: '10',
   commission_pct_open: '7',
 }
@@ -37,7 +36,6 @@ export default function Agents() {
     setForm({
       name:                    a.name,
       email:                   a.email ?? '',
-      is_giorgio_agent:        a.is_giorgio_agent ?? false,
       commission_pct_exclusive: String(a.commission_pct_exclusive ?? 10),
       commission_pct_open:      String(a.commission_pct_open      ?? 7),
     })
@@ -81,28 +79,12 @@ export default function Agents() {
     if (isNaN(excl) || excl < 0 || excl > 100) { flash('error', 'Percentuale esclusiva non valida.'); return }
     if (isNaN(open) || open < 0 || open > 100)  { flash('error', 'Percentuale non esclusiva non valida.'); return }
 
-    if (form.is_giorgio_agent) {
-      const query = supabase
-        .from('agents')
-        .select('id, name')
-        .eq('is_giorgio_agent', true)
-        .limit(1)
 
-      const { data: existingGiorgio } = editing
-        ? await query.neq('id', editing)
-        : await query
-
-      if (existingGiorgio?.length) {
-        flash('error', "Esiste gia un agente impostato come Giorgio. Rimuovi prima il flag dall'agente esistente.")
-        return
-      }
-    }
 
     setSaving(true)
     const payload = {
       name: form.name,
       email: normalizedEmail || null,
-      is_giorgio_agent: !!form.is_giorgio_agent,
       commission_pct_exclusive: excl,
       commission_pct_open: open,
     }
@@ -111,10 +93,7 @@ export default function Agents() {
       : await supabase.from('agents').insert(payload)
     setSaving(false)
     if (error) {
-      if (error.message?.includes('agents_single_giorgio_agent_idx')) {
-        flash('error', "Esiste gia un agente impostato come Giorgio. Rimuovi prima il flag dall'agente esistente.")
-        return
-      }
+
       if (error.message?.includes('agents_email_unique_idx')) {
         flash('error', 'Esiste gia un agente con questa email.')
         return
@@ -226,18 +205,7 @@ export default function Agents() {
             </div>
             <div className="field" />
           </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <input
-              type="checkbox"
-              id="giorgio-agent-toggle"
-              checked={form.is_giorgio_agent}
-              onChange={e => set('is_giorgio_agent', e.target.checked)}
-              style={{ width: 'auto' }}
-            />
-            <label htmlFor="giorgio-agent-toggle" style={{ margin: 0, fontSize: 13, color: 'var(--text-2)', cursor: 'pointer' }}>
-              Questo agente rappresenta Giorgio come agente normale su modelli non-MD
-            </label>
-          </div>
+
           <div style={{ display: 'flex', gap: 10 }}>
             <button type="submit" className="btn btn-primary" disabled={saving}>
               {saving ? 'Salvataggio...' : editing ? 'Salva modifiche' : '+ Aggiungi agente'}
@@ -265,9 +233,7 @@ export default function Agents() {
                       key={a.id}
                       style={editing === a.id
                         ? { background: '#fffbf0' }
-                        : a.is_giorgio_agent
-                          ? { background: '#f3ecfb' }
-                          : {}}
+                        : {}}
                     >
                       <td style={{ fontWeight: 500 }}>{a.name}</td>
                       <td style={{ fontSize: 13, color: 'var(--text-2)' }}>{a.email ?? '—'}</td>

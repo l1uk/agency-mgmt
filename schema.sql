@@ -267,6 +267,10 @@ select
   m.agent_id,
   ag.name          as agent_name,
   ag.is_giorgio_agent as agent_is_giorgio_agent,
+  
+  -- agente Giorgio (per modelli MD)
+  giorgio_ag.id    as giorgio_agent_id,
+  giorgio_ag.name  as giorgio_agent_name,
 
   months_since_first_payment(m.id, py.paid_at) as rel_month_from_first_payment,
   total_paid_by_model(m.id, py.paid_at)        as cumulative_paid,
@@ -331,7 +335,7 @@ select
       end
   ) / 100, 2) as hunt_models_gross,
 
-  -- quota giorgio (20% del residuo, solo modelli MD con giorgio=true)
+  -- quota giorgio (20% del residuo, solo modelli MD con giorgio=true) → assegnata a Giorgio agente
   case when m.school_id is not null and coalesce(s.giorgio, false) = true
     then round(
       round(py.amount * (
@@ -381,7 +385,8 @@ from payments py
 join  contracts c  on c.id  = py.contract_id
 join  models    m  on m.id  = c.model_id
 left join schools s   on s.id  = m.school_id
-left join agents  ag  on ag.id = m.agent_id;
+left join agents  ag  on ag.id = m.agent_id
+left join agents  giorgio_ag on giorgio_ag.is_giorgio_agent = true;
 
 
 -- ================================================================

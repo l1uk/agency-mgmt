@@ -15,9 +15,9 @@ export default function Models() {
 
   async function load() {
     const [{ data: m }, { data: s }, { data: a }] = await Promise.all([
-      supabase.from('models').select('*, schools(name), agents(name, is_giorgio_agent)').order('last_name'),
+      supabase.from('models').select('*, schools(name), agents(name)').order('last_name'),
       supabase.from('schools').select('id, name').order('name'),
-      supabase.from('agents').select('id, name, is_giorgio_agent').order('name'),
+      supabase.from('agents').select('id, name').order('name'),
     ])
     setModels(m ?? [])
     setSchools(s ?? [])
@@ -134,7 +134,7 @@ export default function Models() {
                 <option value="">— nessuno —</option>
                 {agents.map(a => (
                   <option key={a.id} value={a.id}>
-                    {a.name}{a.is_giorgio_agent ? ' (Giorgio agente)' : ''}
+                    {a.name}
                   </option>
                 ))}
               </select>
@@ -172,7 +172,7 @@ export default function Models() {
                       <td>{m.schools?.name ?? <span style={{ color: 'var(--text-3)' }}>—</span>}</td>
                       <td>
                         {m.agents?.name
-                          ? `${m.agents.name}${m.agents.is_giorgio_agent ? ' (Giorgio agente)' : ''}`
+                          ? m.agents.name
                           : <span style={{ color: 'var(--text-3)' }}>—</span>}
                       </td>
                       <td style={{ fontSize: 13, color: 'var(--text-2)' }}>{m.notes}</td>
