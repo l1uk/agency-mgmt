@@ -273,6 +273,16 @@ select
   giorgio_ag.name  as giorgio_agent_name,
 
   months_since_first_payment(m.id, py.paid_at) as rel_month_from_first_payment,
+  months_since_first_payment(m.id, py.paid_at) as months_from_first_payment,
+  
+  case when c.first_job_date is not null
+    then (
+      extract(year  from age(py.paid_at, c.first_job_date)) * 12 +
+      extract(month from age(py.paid_at, c.first_job_date))
+    )::int
+    else null
+  end as months_from_first_job,
+  
   total_paid_by_model(m.id, py.paid_at)        as cumulative_paid,
 
   -- quota MD

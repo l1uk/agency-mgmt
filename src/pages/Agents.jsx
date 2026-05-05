@@ -233,9 +233,27 @@ export default function Agents() {
                       key={a.id}
                       style={editing === a.id
                         ? { background: '#fffbf0' }
+                        : a.is_giorgio_agent
+                        ? { background: '#fff9f0', borderLeft: '4px solid var(--accent)' }
                         : {}}
                     >
-                      <td style={{ fontWeight: 500 }}>{a.name}</td>
+                      <td style={{ fontWeight: 500 }}>
+                        {a.name}
+                        {a.is_giorgio_agent && (
+                          <span style={{
+                            marginLeft: 8,
+                            display: 'inline-block',
+                            padding: '2px 8px',
+                            background: 'var(--accent)',
+                            color: 'white',
+                            borderRadius: 12,
+                            fontSize: 11,
+                            fontWeight: 600
+                          }}>
+                            🔷 Giorgio
+                          </span>
+                        )}
+                      </td>
                       <td style={{ fontSize: 13, color: 'var(--text-2)' }}>{a.email ?? '—'}</td>
                       <td style={{ fontWeight: 600 }}>{a.commission_pct_exclusive ?? a.commission_pct}%</td>
                       <td style={{ fontWeight: 600 }}>{a.commission_pct_open ?? a.commission_pct}%</td>
