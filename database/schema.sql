@@ -67,12 +67,24 @@ create unique index if not exists agents_single_giorgio_agent_idx
   on agents (is_giorgio_agent)
   where is_giorgio_agent = true;
 
+create table if not exists agencies (
+  id         uuid primary key default gen_random_uuid(),
+  name       text not null,
+  hunt_pct   numeric(5,2) not null default 0,
+  created_at timestamptz default now()
+);
+
+alter table agencies
+  add column if not exists hunt_pct numeric(5,2) not null default 0;
+
 create table if not exists models (
   id         uuid primary key default gen_random_uuid(),
   first_name text not null,
   last_name  text not null,
+  agency_id  uuid references agencies(id),
   school_id  uuid references schools(id),
   agent_id   uuid references agents(id),
+  hunt_signed_at date,
   notes      text,
   created_at timestamptz default now(),
   constraint school_agent_exclusive check (
@@ -80,20 +92,54 @@ create table if not exists models (
   )
 );
 
+alter table models
+  add column if not exists agency_id uuid references agencies(id);
+
+alter table models
+  add column if not exists hunt_signed_at date;
+
 create table if not exists contracts (
   id               uuid primary key default gen_random_uuid(),
   model_id         uuid references models(id) not null,
   client_name      text not null,
   reference_amount numeric(10,2),
-  start_date       date not null,
-  end_date         date not null,
   exclusive        boolean not null default true,
-  status           text check (status in ('active','expiring','expired','cancelled'))
+  status           text check (status in ('active','expired','cancelled'))
                    default 'active',
   first_job_date   date,
+  notes            text,
   renewed_at       timestamptz,
   created_at       timestamptz default now()
 );
+
+alter table contracts
+  add column if not exists notes text;
+
+-- Ensure any existing relation named 'jobs' is removed regardless of type (table or view)
+do $$
+begin
+  if exists (select 1 from pg_class where relname = 'jobs' and relkind = 'r') then
+    execute 'drop table if exists jobs cascade';
+  elsif exists (select 1 from pg_class where relname = 'jobs' and relkind = 'v') then
+    execute 'drop view if exists jobs cascade';
+  end if;
+end
+$$;
+
+create view jobs as
+select
+  id,
+  model_id,
+  client_name,
+  reference_amount,
+  exclusive,
+  status,
+  first_job_date as first_job_confirmed_at,
+  first_job_date,
+  notes,
+  renewed_at,
+  created_at
+from contracts;
 
 create table if not exists app_settings (
   id                        boolean primary key default true check (id = true),
@@ -119,27 +165,28 @@ create table if not exists contract_notification_log (
   unique (contract_id, notification_type, contract_end_date)
 );
 
-update contracts
-set status = case
-  when end_date < current_date then 'expired'
-  else 'active'
-end
-where status = 'renewed';
-
+-- Previously we auto-calculated status from end_date; end_date removed.
 alter table contracts drop constraint if exists contracts_status_check;
 
 alter table contracts
   add constraint contracts_status_check
-  check (status in ('active','expiring','expired','cancelled'));
+  check (status in ('active','expired','cancelled'));
 
 create table if not exists payments (
   id          uuid primary key default gen_random_uuid(),
   contract_id uuid references contracts(id) not null,
   amount      numeric(10,2) not null check (amount > 0),
-  paid_at     date not null,
+  paid_at     date,
+  hunt_actual_amount numeric(10,2),
   notes       text,
   created_at  timestamptz default now()
 );
+
+alter table payments
+  add column if not exists hunt_actual_amount numeric(10,2);
+
+alter table payments
+  alter column paid_at drop not null;
 
 
 -- ================================================================
@@ -150,12 +197,12 @@ create or replace function validate_payment_contract_state()
 returns trigger language plpgsql as $$
 declare
   v_status   text;
-  v_end_date date;
 begin
-  select status, end_date
-    into v_status, v_end_date
-  from contracts
-  where id = new.contract_id;
+  -- Check existence in contracts (compat) or jobs
+  select status into v_status from contracts where id = new.contract_id;
+  if not found then
+    select status into v_status from jobs where id = new.contract_id;
+  end if;
 
   if not found then
     raise exception 'Contract % not found', new.contract_id;
@@ -163,14 +210,6 @@ begin
 
   if v_status in ('expired', 'cancelled') then
     raise exception 'Cannot record payments on % contracts', v_status;
-  end if;
-
-  if v_end_date < current_date then
-    raise exception 'Cannot record payments on expired contracts';
-  end if;
-
-  if new.paid_at > v_end_date then
-    raise exception 'Payment date cannot be after contract end date';
   end if;
 
   return new;
@@ -254,28 +293,38 @@ drop view if exists payment_commissions;
 create view payment_commissions as
 select
   py.id            as payment_id,
+  py.contract_id   as job_id,
   py.contract_id,
   py.amount,
+  py.amount        as gross_amount,
+  py.hunt_actual_amount,
   py.paid_at,
   py.notes         as payment_notes,
 
   c.client_name,
   c.exclusive,
+  c.first_job_date as first_job_confirmed_at,
   c.first_job_date,
   c.status         as contract_status,
+  c.status         as job_status,
 
   m.id             as model_id,
   m.first_name || ' ' || m.last_name as model_name,
+  m.agency_id,
   m.school_id,
   s.name           as school_name,
   s.giorgio        as school_has_giorgio,
   m.agent_id,
+  a.name           as agency_name,
+  a.hunt_pct       as agency_hunt_pct,
   ag.name          as agent_name,
   ag.is_giorgio_agent as agent_is_giorgio_agent,
   
   -- agente Giorgio (per modelli MD)
   giorgio_ag.id    as giorgio_agent_id,
   giorgio_ag.name  as giorgio_agent_name,
+
+  round(py.amount * coalesce(a.hunt_pct, 0) / 100, 2) as hunt_theoretical_amount,
 
   months_since_first_payment(m.id, py.paid_at) as rel_month_from_first_payment,
   months_since_first_payment(m.id, py.paid_at) as months_from_first_payment,
@@ -403,9 +452,43 @@ select
 from payments py
 join  contracts c  on c.id  = py.contract_id
 join  models    m  on m.id  = c.model_id
+left join agencies a   on a.id = m.agency_id
 left join schools s   on s.id  = m.school_id
 left join agents  ag  on ag.id = m.agent_id
-left join agents  giorgio_ag on giorgio_ag.is_giorgio_agent = true;
+left join agents  giorgio_ag on giorgio_ag.is_giorgio_agent = true
+where py.paid_at is not null;
+
+
+drop view if exists pending_incomes cascade;
+
+create view pending_incomes as
+select
+  py.id as payment_id,
+  py.contract_id as job_id,
+  py.contract_id,
+  py.amount as gross_amount,
+  py.paid_at,
+  py.hunt_actual_amount,
+  py.notes as payment_notes,
+  py.created_at,
+  c.client_name,
+  c.status as contract_status,
+  c.status as job_status,
+  c.exclusive,
+  c.first_job_date as first_job_confirmed_at,
+  c.first_job_date,
+  m.id as model_id,
+  m.first_name || ' ' || m.last_name as model_name,
+  m.agency_id,
+  a.name as agency_name,
+  a.hunt_pct as agency_hunt_pct,
+  round(py.amount * coalesce(a.hunt_pct, 0) / 100, 2) as hunt_theoretical_amount,
+  (current_date - py.created_at::date) as days_pending
+from payments py
+join contracts c on c.id = py.contract_id
+join models m on m.id = c.model_id
+left join agencies a on a.id = m.agency_id
+where py.paid_at is null;
 
 
 -- ================================================================
@@ -413,65 +496,14 @@ left join agents  giorgio_ag on giorgio_ag.is_giorgio_agent = true;
 -- ================================================================
 
 -- MODIFICA QUI: Aggiungiamo CASCADE per eliminare automaticamente le dipendenze
-drop view if exists contracts_expiring cascade;
-
-create view contracts_expiring as
-select
-  c.id, c.client_name, c.start_date, c.end_date, c.status,
-  m.first_name || ' ' || m.last_name as model_name,
-  (c.end_date - current_date) as days_remaining,
-  case
-    when (c.end_date - current_date) <= 30 then 'urgent'
-    when (c.end_date - current_date) <= 60 then 'warning'
-    else 'ok'
-  end as expiry_level
-from contracts c
-join models m on m.id = c.model_id
-where c.status in ('active','expiring')
-  and (c.end_date - current_date) <= 60
-order by c.end_date asc;
-
--- Questa riga può rimanere così, o puoi rimuoverla se usi CASCADE sopra
-drop view if exists contracts_due_for_expiry_notification;
-
-create view contracts_due_for_expiry_notification as
-select
-  ce.id as contract_id,
-  ce.client_name,
-  ce.start_date,
-  ce.end_date,
-  ce.status,
-  ce.model_name,
-  ce.days_remaining,
-  ce.expiry_level,
-  s.agency_notification_email
-from contracts_expiring ce
-cross join app_settings s
-left join contract_notification_log nl
-  on nl.contract_id = ce.id
- and nl.notification_type = 'expiry_warning'
- and nl.contract_end_date = ce.end_date
-where ce.days_remaining >= 0
-  and s.agency_notification_email is not null
-  and nl.id is null;
+-- Expiry and notification views removed per new domain rules (start/end dates no longer used).
 
   
 -- ================================================================
 -- STEP 5 — FUNZIONE AGGIORNAMENTO STATI CONTRATTI
 -- ================================================================
 
-create or replace function update_expiring_contracts()
-returns void language plpgsql as $$
-begin
-  update contracts set status = 'expiring'
-  where status = 'active'
-    and end_date >= current_date
-    and (end_date - current_date) <= 60;
-
-  update contracts set status = 'expired'
-  where status in ('active','expiring') and end_date < current_date;
-end;
-$$;
+-- Removed update_expiring_contracts/update_expiring_jobs: expiry logic deprecated.
 
 
 -- ================================================================
@@ -479,6 +511,7 @@ $$;
 -- ================================================================
 
 alter table schools                  enable row level security;
+alter table agencies                 enable row level security;
 alter table school_commission_rules  enable row level security;
 alter table agents                   enable row level security;
 alter table models                   enable row level security;
@@ -492,7 +525,7 @@ do $$ declare r record; begin
   for r in
     select policyname, tablename from pg_policies
     where tablename in (
-      'schools','school_commission_rules','agents',
+      'schools','agencies','school_commission_rules','agents',
       'models','contracts','app_settings','contract_notification_log','payments'
     )
   loop
@@ -513,6 +546,7 @@ $$;
 
 -- agenzia: tutto
 create policy "agency_all" on schools                 for all using (auth_role() = 'agency');
+create policy "agency_all" on agencies                for all using (auth_role() = 'agency');
 create policy "agency_all" on school_commission_rules for all using (auth_role() = 'agency');
 create policy "agency_all" on agents                  for all using (auth_role() = 'agency');
 create policy "agency_all" on models                  for all using (auth_role() = 'agency');
