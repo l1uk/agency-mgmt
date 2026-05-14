@@ -43,6 +43,7 @@ create table if not exists agents (
   is_giorgio_agent         boolean not null default false,
   commission_pct_exclusive numeric(5,2) not null default 10,
   commission_pct_open      numeric(5,2) not null default 7,
+  commission_pct_month13   numeric(5,2) not null default 5,
   created_at               timestamptz default now()
 );
 
@@ -54,6 +55,9 @@ alter table agents
 
 alter table agents
   add column if not exists is_giorgio_agent boolean not null default false;
+
+alter table agents
+  add column if not exists commission_pct_month13 numeric(5,2) not null default 5;
 
 create unique index if not exists agents_email_unique_idx
   on agents (lower(email))
@@ -226,7 +230,8 @@ create or replace function agent_pct(
   p_paid_at   date,
   p_exclusive boolean,
   p_pct_excl  numeric,
-  p_pct_open  numeric
+  p_pct_open  numeric,
+  p_pct_month13 numeric
 ) returns numeric language sql stable as $$
   select case
     when p_first_job is null then 0
@@ -235,7 +240,7 @@ create or replace function agent_pct(
       extract(month from age(p_paid_at, p_first_job))
     )::int <= 12
     then case when p_exclusive then p_pct_excl else p_pct_open end
-    else 5
+    else p_pct_month13
   end
 $$;
 
@@ -309,7 +314,8 @@ select
     then agent_pct(
       c.first_job_date, py.paid_at, c.exclusive,
       coalesce(ag.commission_pct_exclusive, 10),
-      coalesce(ag.commission_pct_open, 7)
+      coalesce(ag.commission_pct_open, 7),
+      coalesce(ag.commission_pct_month13, 5)
     )
     else 0
   end as agent_pct,
@@ -319,7 +325,8 @@ select
       then agent_pct(
         c.first_job_date, py.paid_at, c.exclusive,
         coalesce(ag.commission_pct_exclusive, 10),
-        coalesce(ag.commission_pct_open, 7)
+        coalesce(ag.commission_pct_open, 7),
+        coalesce(ag.commission_pct_month13, 5)
       )
       else 0
     end / 100, 2
@@ -339,7 +346,8 @@ select
         then agent_pct(
           c.first_job_date, py.paid_at, c.exclusive,
           coalesce(ag.commission_pct_exclusive, 10),
-          coalesce(ag.commission_pct_open, 7)
+          coalesce(ag.commission_pct_open, 7),
+          coalesce(ag.commission_pct_month13, 5)
         )
         else 0
       end
@@ -372,7 +380,8 @@ select
         then agent_pct(
           c.first_job_date, py.paid_at, c.exclusive,
           coalesce(ag.commission_pct_exclusive, 10),
-          coalesce(ag.commission_pct_open, 7)
+          coalesce(ag.commission_pct_open, 7),
+          coalesce(ag.commission_pct_month13, 5)
         )
         else 0
       end
@@ -597,7 +606,7 @@ create policy "agent_read" on payments
 -- select id,  7, 12, 5  from schools where name = 'MD' union all
 -- select id, 13, 18, 3  from schools where name = 'MD';
 --
--- insert into agents (name, commission_pct_exclusive, commission_pct_open)
+-- insert into agents (name, commission_pct_exclusive, commission_pct_open, commission_pct_month13)
 -- values ('Marco Rossi', 10, 7);
 --
 -- -- modello da MD (no agente)

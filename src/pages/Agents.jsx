@@ -1,11 +1,14 @@
 import { useState, useEffect } from 'react'
 import { supabase, invokeEdgeFunction, getFreshAccessToken } from '../lib/supabase'
 
+const agentSelectFields = 'id, name, email, invited_at, commission_pct_exclusive, commission_pct_open, commission_pct_month13'
+
 const empty = {
   name: '',
   email: '',
   commission_pct_exclusive: '10',
   commission_pct_open: '7',
+  commission_pct_month13: '5',
 }
 
 export default function Agents() {
@@ -17,7 +20,7 @@ export default function Agents() {
   const [saving, setSaving]   = useState(false)
 
   async function load() {
-    const { data } = await supabase.from('agents').select('*').order('name')
+    const { data } = await supabase.from('agents').select(agentSelectFields).order('name')
     setAgents(data ?? [])
     setLoading(false)
   }
@@ -38,6 +41,7 @@ export default function Agents() {
       email:                   a.email ?? '',
       commission_pct_exclusive: String(a.commission_pct_exclusive ?? 10),
       commission_pct_open:      String(a.commission_pct_open      ?? 7),
+      commission_pct_month13:   String(a.commission_pct_month13   ?? 5),
     })
     window.scrollTo({ top: 0, behavior: 'smooth' })
   }
@@ -76,8 +80,10 @@ export default function Agents() {
 
     const excl = parseFloat(form.commission_pct_exclusive)
     const open = parseFloat(form.commission_pct_open)
+    const month13 = parseFloat(form.commission_pct_month13)
     if (isNaN(excl) || excl < 0 || excl > 100) { flash('error', 'Percentuale esclusiva non valida.'); return }
     if (isNaN(open) || open < 0 || open > 100)  { flash('error', 'Percentuale non esclusiva non valida.'); return }
+    if (isNaN(month13) || month13 < 0 || month13 > 100) { flash('error', 'Percentuale dal mese 13 non valida.'); return }
 
 
 
@@ -87,6 +93,7 @@ export default function Agents() {
       email: normalizedEmail || null,
       commission_pct_exclusive: excl,
       commission_pct_open: open,
+      commission_pct_month13: month13,
     }
     const { error } = editing
       ? await supabase.from('agents').update(payload).eq('id', editing)
@@ -172,7 +179,6 @@ export default function Agents() {
         <div className="card-title">{editing ? 'Modifica agente' : 'Nuovo agente'}</div>
         <p style={{ fontSize: 13, color: 'var(--text-2)', marginBottom: 16 }}>
           Mesi 1–12: percentuale piena (diversa per esclusiva e non esclusiva). Dal mese 13 in poi: 5% fisso contrattuale.
-          Il flag Giorgio qui identifica solo Giorgio come agente normale per modelli non-MD.
         </p>
         {msg && <div className={`alert alert-${msg.type === 'error' ? 'error' : 'success'}`}>{msg.text}</div>}
 
@@ -197,13 +203,17 @@ export default function Agents() {
                 value={form.commission_pct_exclusive} onChange={e => set('commission_pct_exclusive', e.target.value)} placeholder="10" />
             </div>
           </div>
-          <div className="form-row-2">
+          <div className="form-row-3">
             <div className="field">
               <label>% Non esclusiva (mesi 1–12)</label>
               <input type="number" step="0.01" min="0" max="100"
                 value={form.commission_pct_open} onChange={e => set('commission_pct_open', e.target.value)} placeholder="7" />
             </div>
-            <div className="field" />
+            <div className="field">
+              <label>% dal mese 13</label>
+              <input type="number" step="0.01" min="0" max="100"
+                value={form.commission_pct_month13} onChange={e => set('commission_pct_month13', e.target.value)} placeholder="5" />
+            </div>
           </div>
 
           <div style={{ display: 'flex', gap: 10 }}>
@@ -255,9 +265,9 @@ export default function Agents() {
                         )}
                       </td>
                       <td style={{ fontSize: 13, color: 'var(--text-2)' }}>{a.email ?? '—'}</td>
-                      <td style={{ fontWeight: 600 }}>{a.commission_pct_exclusive ?? a.commission_pct}%</td>
-                      <td style={{ fontWeight: 600 }}>{a.commission_pct_open ?? a.commission_pct}%</td>
-                      <td style={{ color: 'var(--text-2)' }}>5%</td>
+                      <td style={{ fontWeight: 600 }}>{a.commission_pct_exclusive ?? '—'}%</td>
+                      <td style={{ fontWeight: 600 }}>{a.commission_pct_open ?? '—'}%</td>
+                      <td style={{ color: 'var(--text-2)' }}>{a.commission_pct_month13 ?? '—'}%</td>
                       <td style={{ fontSize: 13, color: 'var(--text-2)' }}>
                         {a.invited_at
                           ? <span style={{ color: 'var(--text-3)' }}>Invito gia inviato</span>
