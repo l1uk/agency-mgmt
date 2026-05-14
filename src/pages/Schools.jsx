@@ -185,7 +185,7 @@ export default function Schools() {
       <div className="card">
         <div className="card-title">Nuova regola provvigione</div>
         <p style={{ fontSize: 13, color: 'var(--text-2)', marginBottom: 16 }}>
-          Definisci la % dovuta alla scuola in base alla durata del contratto in mesi. Lascia "A mese" vuoto per "senza limite".
+          Definisci la % dovuta alla scuola in base alla durata del lavoro in mesi. Lascia "A mese" vuoto per "senza limite".
         </p>
         <form onSubmit={addRule} className="form-grid">
           <div className="form-row-2">

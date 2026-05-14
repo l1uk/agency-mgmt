@@ -60,29 +60,11 @@ Su vercel.com → Import → seleziona il repo → aggiungi le 2 env vars → De
 
 Ogni `git push` su `main` → rideploy automatico.
 
-## Notifiche email contratti
+## Notifiche email contratti (deprecate)
 
-Il progetto include ora due Supabase Edge Functions:
+La logica di scadenza/avvisi è stata rimossa dal dominio: i campi `start_date`/`end_date` non sono più presenti su `jobs` e le Edge Functions di notifica non vengono più distribuite.
 
-- `send-contract-expiry-notifications`
-- `send-contract-renewal-confirmation`
-
-Configurazione minima necessaria in Supabase:
-
-1. Esegui l'ultima versione di `schema.sql`
-2. Imposta i secrets delle Edge Functions:
-   - `SUPABASE_URL`
-   - `SUPABASE_SERVICE_ROLE_KEY`
-   - `EDGE_SUPABASE_ANON_KEY`
-   - `RESEND_API_KEY`
-   - `EMAIL_FROM`
-3. Inserisci l'email dell'agenzia in `app_settings.agency_notification_email`
-4. Pubblica le functions in `supabase/functions/`
-
-Nota:
-- Le email di rinnovo vengono inviate quando l'agenzia conferma il rinnovo dall'app.
-- Le email di scadenza vengono invocate dall'app in modo opportunistico dalla dashboard e sono deduplicate tramite `contract_notification_log`.
-- Per invio automatico anche senza accesso alla dashboard, va aggiunto un job schedulato Supabase Cron o un scheduler esterno che chiami `send-contract-expiry-notifications`.
+Se in futuro vuoi ripristinare un sistema di avvisi, implementa una nuova fonte temporale (es. `reminder_date`) e scrivi le nuove funzioni/cron job in modo esplicito.
 
 ## Invito account agente
 

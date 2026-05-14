@@ -119,8 +119,7 @@ echo "🚀 Inizio deploy delle funzioni..."
 # 2. DEPLOY DELLE FUNZIONI
 functions=(
   "invite-agent-account"
-  "send-contract-expiry-notifications"
-  "send-contract-renewal-confirmation"
+  # expiry/renewal notification functions removed
   "invite-school-account"
 )
 

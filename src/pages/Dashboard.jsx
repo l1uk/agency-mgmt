@@ -11,30 +11,26 @@ export default function Dashboard() {
 
   useEffect(() => {
     async function load() {
-      await supabase.rpc('update_expiring_contracts')
-
-      const [{ data: payments }, { data: contracts }, { data: expiringContracts }] = await Promise.all([
-        supabase.from('payment_commissions').select('contract_id, model_name, amount, hunt_models_net'),
+      const [{ data: payments }, { data: pendingPayments }, { data: jobs }] = await Promise.all([
+        supabase.from('payment_commissions').select('job_id, model_name, gross_amount, amount, hunt_models_net'),
+        supabase.from('payments').select('gross_amount, amount').is('paid_at', null),
         supabase
-          .from('contracts')
-          .select('id, client_name, start_date, end_date, status, models(first_name, last_name)')
+          .from('jobs')
+          .select('id, client_name, status, first_job_date, models(first_name, last_name)')
           .order('created_at', { ascending: false })
           .limit(6),
-        supabase
-          .from('contracts_expiring')
-          .select('*')
-          .order('end_date', { ascending: true })
-          .limit(5),
       ])
 
-      const active    = contracts?.filter(r => ['active', 'expiring', 'renewed'].includes(r.status)).length ?? 0
-      const volume    = payments?.reduce((s, r) => s + parseFloat(r.amount || 0), 0) ?? 0
+      const active    = jobs?.filter(r => ['active', 'expiring', 'renewed'].includes(r.status)).length ?? 0
+      const volume    = payments?.reduce((s, r) => s + parseFloat(r.gross_amount || r.amount || 0), 0) ?? 0
       const agency    = payments?.reduce((s, r) => s + parseFloat(r.hunt_models_net || 0), 0) ?? 0
       const models_n  = new Set(payments?.map(r => r.model_name)).size
+      const pending   = pendingPayments?.reduce((s, r) => s + parseFloat(r.gross_amount || r.amount || 0), 0) ?? 0
+      const pending_n = pendingPayments?.length ?? 0
 
-      setStats({ active, volume, agency, models_n })
-      setRecent(contracts ?? [])
-      setExpiring(expiringContracts ?? [])
+      setStats({ active, volume, agency, models_n, pending, pending_n })
+      setRecent(jobs ?? [])
+      setExpiring([])
       setLoading(false)
     }
     load()
@@ -49,19 +45,15 @@ export default function Dashboard() {
         <p>Panoramica generale dell'agenzia</p>
       </div>
 
-      {expiring.length > 0 && (
-        <div className="alert alert-error" style={{ marginBottom: 20 }}>
-          ⚠ {expiring.length} contratt{expiring.length === 1 ? 'o' : 'i'} in scadenza nei prossimi 60 giorni.
-        </div>
-      )}
+      {/* Expiry warnings removed; start/end dates deprecated */}
 
       <div className="stats-grid">
         <div className="stat-card">
-          <div className="stat-label">Contratti attivi</div>
+          <div className="stat-label">Lavori attivi</div>
           <div className="stat-value">{stats.active}</div>
         </div>
         <div className="stat-card">
-          <div className="stat-label">Modelli con contratti</div>
+          <div className="stat-label">Modelli con lavori</div>
           <div className="stat-value">{stats.models_n}</div>
         </div>
         <div className="stat-card">
@@ -69,15 +61,20 @@ export default function Dashboard() {
           <div className="stat-value" style={{ fontSize: 20 }}>{fmt(stats.volume)}</div>
         </div>
         <div className="stat-card">
-          <div className="stat-label">Ricavo agenzia</div>
+          <div className="stat-label">Incasso HUNT</div>
           <div className="stat-value accent" style={{ fontSize: 20 }}>{fmt(stats.agency)}</div>
+        </div>
+        <div className="stat-card">
+          <div className="stat-label">Incassi pendenti</div>
+          <div className="stat-value" style={{ fontSize: 20 }}>{stats.pending_n}</div>
+          <div style={{ fontSize: 12, color: 'var(--text-3)', marginTop: 4 }}>{fmt(stats.pending)}</div>
         </div>
       </div>
 
       <div className="card">
-        <div className="card-title">Ultimi contratti</div>
+        <div className="card-title">Ultimi lavori</div>
         {recent.length === 0
-          ? <div className="empty">Nessun contratto ancora registrato.</div>
+          ? <div className="empty">Nessun lavoro ancora registrato.</div>
           : (
             <div className="table-wrap">
               <table>
@@ -85,7 +82,7 @@ export default function Dashboard() {
                   <tr>
                     <th>Modello</th>
                     <th>Cliente</th>
-                    <th>Periodo</th>
+                    <th>Primo job</th>
                     <th>Stato</th>
                   </tr>
                 </thead>
@@ -95,7 +92,7 @@ export default function Dashboard() {
                       <td>{r.models?.first_name} {r.models?.last_name}</td>
                       <td>{r.client_name}</td>
                       <td style={{ fontSize: 13, color: 'var(--text-2)' }}>
-                        {r.start_date} → {r.end_date}
+                        {r.first_job_date ?? r.created_at}
                       </td>
                       <td><span className={`badge badge-${r.status}`}>{r.status}</span></td>
                     </tr>

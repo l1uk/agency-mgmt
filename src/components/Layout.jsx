@@ -4,8 +4,10 @@ import { useAuth } from '../hooks/useAuth'
 const links = [
   { to: '/',            icon: '⬡', label: 'Dashboard',   end: true },
   { to: '/commissions', icon: '◎', label: 'Provvigioni' },
-  { to: '/contracts',   icon: '◻', label: 'Contratti'   },
+  { to: '/jobs',        icon: '◻', label: 'Lavori'      },
+  { to: '/pending-incomes', icon: '⧗', label: 'Incassi pendenti' },
   { to: '/models',      icon: '◯', label: 'Modelli'     },
+  { to: '/agencies',    icon: '⬢', label: 'Agenzie'     },
   { to: '/schools',     icon: '▣', label: 'Scuole'      },
   { to: '/agents',      icon: '◈', label: 'Agenti'      },
 ]

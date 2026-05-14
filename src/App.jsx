@@ -4,10 +4,12 @@ import Layout from './components/Layout'
 import Login from './pages/Login'
 import Dashboard from './pages/Dashboard'
 import Models from './pages/Models'
-import Contracts from './pages/Contracts'
+import Jobs from './pages/Jobs'
 import Commissions from './pages/Commissions'
+import Agencies from './pages/Agencies'
 import Schools from './pages/Schools'
 import Agents from './pages/Agents'
+import PendingIncomes from './pages/PendingIncomes'
 import SchoolView from './pages/SchoolView'
 import AgentView from './pages/AgentView'
 import SetPassword from './pages/SetPassword'
@@ -55,8 +57,11 @@ export default function App() {
         <Route path="/" element={<PrivateRoute requireRole="agency"><Layout /></PrivateRoute>}>
           <Route index            element={<Dashboard />} />
           <Route path="models"      element={<Models />} />
-          <Route path="contracts"   element={<Contracts />} />
+          <Route path="jobs"        element={<Jobs />} />
+          <Route path="contracts"   element={<Navigate to="/jobs" replace />} />
           <Route path="commissions" element={<Commissions />} />
+          <Route path="agencies"    element={<Agencies />} />
+          <Route path="pending-incomes" element={<PendingIncomes />} />
           <Route path="schools"     element={<Schools />} />
           <Route path="agents"      element={<Agents />} />
         </Route>

@@ -6,15 +6,17 @@ const fmt = n => '€' + parseFloat(n || 0).toLocaleString('it-IT', { minimumFra
 export default function Payments({ contractId, modelName, clientName, firstJobDate, onFirstJobChange }) {
   const [payments, setPayments] = useState([])
   const [commissions, setCommissions] = useState([])
-  const [form, setForm] = useState({ amount: '', paid_at: '', notes: '' })
+  const [form, setForm] = useState({ gross_amount: '', paid_at: '', hunt_actual_amount: '', notes: '' })
   const [jobDate, setJobDate] = useState(firstJobDate ?? '')
   const [msg, setMsg] = useState(null)
   const [saving, setSaving] = useState(false)
+  const [editingId, setEditingId] = useState(null)
+  const [editForm, setEditForm] = useState({ gross_amount: '', paid_at: '', hunt_actual_amount: '', notes: '' })
 
   async function load() {
     const [{ data: p }, { data: c }] = await Promise.all([
       supabase.from('payments').select('*').eq('contract_id', contractId).order('paid_at'),
-      supabase.from('payment_commissions').select('*').eq('contract_id', contractId).order('paid_at'),
+      supabase.from('payment_commissions').select('*').eq('job_id', contractId).order('paid_at'),
     ])
     setPayments(p ?? [])
     setCommissions(c ?? [])
@@ -28,7 +30,7 @@ export default function Payments({ contractId, modelName, clientName, firstJobDa
   }
 
   const saveJobDate = async () => {
-    const { error } = await supabase.from('contracts')
+    const { error } = await supabase.from('jobs')
       .update({ first_job_date: jobDate || null })
       .eq('id', contractId)
     if (error) { flash('error', error.message); return }
@@ -39,18 +41,19 @@ export default function Payments({ contractId, modelName, clientName, firstJobDa
 
   const addPayment = async (e) => {
     e.preventDefault()
-    if (!form.amount || !form.paid_at) { flash('error', 'Importo e data sono obbligatori.'); return }
+    if (!form.gross_amount) { flash('error', 'Inserisci il totale lavoro.'); return }
     setSaving(true)
     const { error } = await supabase.from('payments').insert({
       contract_id: contractId,
-      amount:  parseFloat(form.amount),
-      paid_at: form.paid_at,
+      amount:  parseFloat(form.gross_amount),
+      paid_at: form.paid_at || null,
+      hunt_actual_amount: form.paid_at ? (form.hunt_actual_amount ? parseFloat(form.hunt_actual_amount) : null) : null,
       notes:   form.notes || null,
     })
     setSaving(false)
     if (error) { flash('error', error.message); return }
     flash('success', 'Incasso registrato.')
-    setForm({ amount: '', paid_at: '', notes: '' })
+    setForm({ gross_amount: '', paid_at: '', hunt_actual_amount: '', notes: '' })
     load()
   }
 
@@ -58,6 +61,31 @@ export default function Payments({ contractId, modelName, clientName, firstJobDa
     if (!confirm('Eliminare questo incasso?')) return
     await supabase.from('payments').delete().eq('id', id)
     load()
+  }
+
+  const startEdit = (r) => {
+    setEditingId(r.payment_id)
+    setEditForm({
+      gross_amount: r.gross_amount ?? r.amount ?? '',
+      paid_at: r.paid_at ?? '',
+      hunt_actual_amount: r.hunt_actual_amount ?? '',
+      notes: r.payment_notes ?? ''
+    })
+  }
+
+  const saveEdit = async (id) => {
+    setSaving(true)
+    const { error } = await supabase.from('payments').update({
+      amount: parseFloat(editForm.gross_amount) || null,
+      paid_at: editForm.paid_at || null,
+      hunt_actual_amount: editForm.paid_at ? (editForm.hunt_actual_amount ? parseFloat(editForm.hunt_actual_amount) : null) : null,
+      notes: editForm.notes || null,
+    }).eq('id', id)
+    setSaving(false)
+    if (error) { flash('error', error.message); return }
+    setEditingId(null)
+    load()
+    flash('success', 'Incasso aggiornato.')
   }
 
   // totals from commissions view
@@ -68,6 +96,9 @@ export default function Payments({ contractId, modelName, clientName, firstJobDa
     giorgio_amount:   acc.giorgio_amount   + parseFloat(r.giorgio_amount || 0),
     hunt_models_net:  acc.hunt_models_net  + parseFloat(r.hunt_models_net || 0),
   }), { amount: 0, md_amount: 0, agent_amount: 0, giorgio_amount: 0, hunt_models_net: 0 })
+
+  const agencyPct = commissions[0]?.agency_hunt_pct ?? 0
+  const theoreticalHunt = parseFloat(form.gross_amount || 0) * parseFloat(agencyPct || 0) / 100
 
   return (
     <div style={{ marginTop: 16 }}>
@@ -87,17 +118,21 @@ export default function Payments({ contractId, modelName, clientName, firstJobDa
         </div>
       )}
 
+      <div className="alert alert-success" style={{ marginBottom: 20 }}>
+        Percentuale Hunt dell'agenzia: <strong>{agencyPct}%</strong> · importo teorico su questo lavoro: <strong>{fmt(theoreticalHunt)}</strong>
+      </div>
+
       {/* Add payment */}
       <form onSubmit={addPayment} className="form-grid" style={{ marginBottom: 20 }}>
         <div className="form-row-3">
           <div className="field">
-            <label>Importo incasso € *</label>
+            <label>Totale lavoro € *</label>
             <input type="number" step="0.01" min="0"
-              value={form.amount} onChange={e => setForm(f => ({ ...f, amount: e.target.value }))}
+              value={form.gross_amount} onChange={e => setForm(f => ({ ...f, gross_amount: e.target.value }))}
               placeholder="500" />
           </div>
           <div className="field">
-            <label>Data incasso *</label>
+            <label>Data incasso</label>
             <input type="date" value={form.paid_at}
               onChange={e => setForm(f => ({ ...f, paid_at: e.target.value }))} />
           </div>
@@ -107,12 +142,36 @@ export default function Payments({ contractId, modelName, clientName, firstJobDa
               placeholder="Opzionale" />
           </div>
         </div>
+        {form.paid_at && (
+          <div className="form-row-2">
+            <div className="field">
+              <label>Incasso effettivo Hunt</label>
+              <input
+                type="number"
+                step="0.01"
+                min="0"
+                value={form.hunt_actual_amount}
+                onChange={e => setForm(f => ({ ...f, hunt_actual_amount: e.target.value }))}
+                placeholder={theoreticalHunt.toFixed(2)}
+              />
+            </div>
+            <div className="field" style={{ display: 'flex', alignItems: 'end', fontSize: 13, color: 'var(--text-2)' }}>
+              Se lasci vuoto, il valore rimane opzionale e puoi recuperarlo più tardi.
+            </div>
+          </div>
+        )}
         <div>
           <button type="submit" className="btn btn-primary btn-sm" disabled={saving}>
             {saving ? '...' : '+ Registra incasso'}
           </button>
         </div>
       </form>
+
+      {payments.some(p => !p.paid_at) && (
+        <div className="alert alert-error" style={{ marginBottom: 20 }}>
+          Ci sono incassi pendenti su questo lavoro. Li trovi anche nella sezione "Incassi pendenti".
+        </div>
+      )}
 
       {/* Payments + commissions table */}
       {commissions.length > 0 && (
@@ -121,7 +180,7 @@ export default function Payments({ contractId, modelName, clientName, firstJobDa
             <table>
               <thead>
                 <tr>
-                  <th>Data</th><th>Incasso</th><th>Mese rel.</th>
+                  <th>Data</th><th>Totale lavoro</th><th>Hunt %</th><th>Hunt teorico</th><th>Hunt effettivo</th><th>Mese rel.</th>
                   <th>MD %</th><th>€ MD</th>
                   <th>Agente %</th><th>€ Agente</th>
                   <th>Giorgio €</th>
@@ -131,28 +190,57 @@ export default function Payments({ contractId, modelName, clientName, firstJobDa
               </thead>
               <tbody>
                 {commissions.map(r => (
-                  <tr key={r.payment_id}>
-                    <td style={{ fontSize: 13 }}>{r.paid_at}</td>
-                    <td className="mono">{fmt(r.amount)}</td>
-                    <td style={{ textAlign: 'center', color: 'var(--text-2)', fontSize: 13 }}>{r.rel_month_from_first_payment}</td>
-                    <td style={{ color: r.md_amount > 0 ? 'var(--navy-light)' : 'var(--text-3)' }}>{r.md_pct}%</td>
-                    <td className="mono">{fmt(r.md_amount)}</td>
-                    <td style={{ color: r.agent_amount > 0 ? 'var(--accent-dim)' : 'var(--text-3)' }}>{r.agent_pct}%</td>
-                    <td className="mono">{fmt(r.agent_amount)}</td>
-                    <td className="mono" style={{ color: r.giorgio_amount > 0 ? '#7b5ea7' : 'var(--text-3)' }}>
-                      {fmt(r.giorgio_amount)}
-                    </td>
-                    <td className="mono" style={{ fontWeight: 600, color: 'var(--success)' }}>{fmt(r.hunt_models_net)}</td>
-                    <td>
-                      <button className="btn btn-danger btn-sm" onClick={() => deletePayment(r.payment_id)}>✕</button>
-                    </td>
-                  </tr>
+                  editingId === r.payment_id ? (
+                    <tr key={r.payment_id}>
+                      <td><input type="date" value={editForm.paid_at} onChange={e => setEditForm(f => ({ ...f, paid_at: e.target.value }))} /></td>
+                      <td className="mono"><input type="number" step="0.01" min="0" value={editForm.gross_amount} onChange={e => setEditForm(f => ({ ...f, gross_amount: e.target.value }))} /></td>
+                      <td style={{ textAlign: 'center', color: 'var(--text-2)', fontSize: 13 }}>{r.agency_hunt_pct ?? 0}%</td>
+                      <td className="mono" style={{ color: 'var(--success)' }}>{fmt(r.hunt_theoretical_amount)}</td>
+                      <td className="mono"><input type="number" step="0.01" min="0" value={editForm.hunt_actual_amount} onChange={e => setEditForm(f => ({ ...f, hunt_actual_amount: e.target.value }))} /></td>
+                      <td style={{ textAlign: 'center', color: 'var(--text-2)', fontSize: 13 }}>{r.rel_month_from_first_payment}</td>
+                      <td style={{ color: r.md_amount > 0 ? 'var(--navy-light)' : 'var(--text-3)' }}>{r.md_pct}%</td>
+                      <td className="mono">{fmt(r.md_amount)}</td>
+                      <td style={{ color: r.agent_amount > 0 ? 'var(--accent-dim)' : 'var(--text-3)' }}>{r.agent_pct}%</td>
+                      <td className="mono">{fmt(r.agent_amount)}</td>
+                      <td className="mono" style={{ color: r.giorgio_amount > 0 ? '#7b5ea7' : 'var(--text-3)' }}>{fmt(r.giorgio_amount)}</td>
+                      <td className="mono" style={{ fontWeight: 600, color: 'var(--success)' }}>{fmt(r.hunt_models_net)}</td>
+                      <td>
+                        <div style={{ display: 'flex', gap: 8 }}>
+                          <button className="btn btn-primary btn-sm" onClick={() => saveEdit(r.payment_id)} disabled={saving}>{saving ? '...' : 'Salva'}</button>
+                          <button className="btn btn-ghost btn-sm" onClick={() => { setEditingId(null); setEditForm({ gross_amount: '', paid_at: '', hunt_actual_amount: '', notes: '' }) }}>Annulla</button>
+                        </div>
+                      </td>
+                    </tr>
+                  ) : (
+                    <tr key={r.payment_id}>
+                      <td style={{ fontSize: 13 }}>{r.paid_at}</td>
+                      <td className="mono">{fmt(r.gross_amount ?? r.amount)}</td>
+                      <td style={{ textAlign: 'center', color: 'var(--text-2)', fontSize: 13 }}>{r.agency_hunt_pct ?? 0}%</td>
+                      <td className="mono" style={{ color: 'var(--success)' }}>{fmt(r.hunt_theoretical_amount)}</td>
+                      <td className="mono">{fmt(r.hunt_actual_amount)}</td>
+                      <td style={{ textAlign: 'center', color: 'var(--text-2)', fontSize: 13 }}>{r.rel_month_from_first_payment}</td>
+                      <td style={{ color: r.md_amount > 0 ? 'var(--navy-light)' : 'var(--text-3)' }}>{r.md_pct}%</td>
+                      <td className="mono">{fmt(r.md_amount)}</td>
+                      <td style={{ color: r.agent_amount > 0 ? 'var(--accent-dim)' : 'var(--text-3)' }}>{r.agent_pct}%</td>
+                      <td className="mono">{fmt(r.agent_amount)}</td>
+                      <td className="mono" style={{ color: r.giorgio_amount > 0 ? '#7b5ea7' : 'var(--text-3)' }}>
+                        {fmt(r.giorgio_amount)}
+                      </td>
+                      <td className="mono" style={{ fontWeight: 600, color: 'var(--success)' }}>{fmt(r.hunt_models_net)}</td>
+                      <td>
+                        <div style={{ display: 'flex', gap: 6 }}>
+                          <button className="btn btn-ghost btn-sm" onClick={() => startEdit(r)}>Modifica</button>
+                          <button className="btn btn-danger btn-sm" onClick={() => deletePayment(r.payment_id)}>✕</button>
+                        </div>
+                      </td>
+                    </tr>
+                  )
                 ))}
                 {/* Totals row */}
                 <tr style={{ background: 'var(--surface-2)', fontWeight: 600 }}>
                   <td>Totale</td>
                   <td className="mono">{fmt(totals.amount)}</td>
-                  <td></td>
+                  <td></td><td></td><td></td><td></td>
                   <td></td><td className="mono">{fmt(totals.md_amount)}</td>
                   <td></td><td className="mono">{fmt(totals.agent_amount)}</td>
                   <td className="mono">{fmt(totals.giorgio_amount)}</td>
@@ -166,7 +254,7 @@ export default function Payments({ contractId, modelName, clientName, firstJobDa
       )}
 
       {commissions.length === 0 && payments.length === 0 && (
-        <p style={{ fontSize: 13, color: 'var(--text-3)' }}>Nessun incasso registrato per questo contratto.</p>
+        <p style={{ fontSize: 13, color: 'var(--text-3)' }}>Nessun incasso registrato per questo lavoro.</p>
       )}
     </div>
   )

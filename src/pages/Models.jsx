@@ -1,10 +1,11 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '../lib/supabase'
 
-const empty = { first_name: '', last_name: '', school_id: '', agent_id: '', notes: '' }
+const empty = { first_name: '', last_name: '', agency_id: '', hunt_signed_at: '', school_id: '', agent_id: '', notes: '' }
 
 export default function Models() {
   const [models, setModels]     = useState([])
+  const [agencies, setAgencies] = useState([])
   const [schools, setSchools]   = useState([])
   const [agents, setAgents]     = useState([])
   const [form, setForm]         = useState(empty)
@@ -14,12 +15,14 @@ export default function Models() {
   const [saving, setSaving]     = useState(false)
 
   async function load() {
-    const [{ data: m }, { data: s }, { data: a }] = await Promise.all([
-      supabase.from('models').select('*, schools(name), agents(name)').order('last_name'),
+    const [{ data: m }, { data: ag }, { data: s }, { data: a }] = await Promise.all([
+      supabase.from('models').select('*, schools(name), agents(name), agencies(name, hunt_pct)').order('last_name'),
+      supabase.from('agencies').select('id, name, hunt_pct').order('name'),
       supabase.from('schools').select('id, name').order('name'),
       supabase.from('agents').select('id, name').order('name'),
     ])
     setModels(m ?? [])
+    setAgencies(ag ?? [])
     setSchools(s ?? [])
     setAgents(a ?? [])
     setLoading(false)
@@ -39,6 +42,8 @@ export default function Models() {
     setForm({
       first_name: m.first_name,
       last_name:  m.last_name,
+      agency_id:  m.agency_id ?? '',
+      hunt_signed_at: m.hunt_signed_at ?? '',
       school_id:  m.school_id ?? '',
       agent_id:   m.agent_id  ?? '',
       notes:      m.notes     ?? '',
@@ -53,10 +58,15 @@ export default function Models() {
     if (!form.first_name || !form.last_name) {
       flash('error', 'Nome e cognome sono obbligatori.'); return
     }
+    if (!form.agency_id) {
+      flash('error', "Seleziona un'agenzia."); return
+    }
     setSaving(true)
     const payload = {
       first_name: form.first_name,
       last_name:  form.last_name,
+      agency_id:  form.agency_id || null,
+      hunt_signed_at: form.hunt_signed_at || null,
       school_id:  form.school_id || null,
       agent_id:   form.agent_id  || null,   // explicitly null when empty
       notes:      form.notes     || null,
@@ -73,11 +83,11 @@ export default function Models() {
   }
 
   const deleteModel = async (id) => {
-    // Check for linked contracts first
+    // Check for linked jobs first
     const { data: linked } = await supabase
-      .from('contracts').select('id').eq('model_id', id).limit(1)
+      .from('jobs').select('id').eq('model_id', id).limit(1)
     if (linked?.length > 0) {
-      flash('error', 'Impossibile eliminare: questo modello ha contratti associati. Elimina prima i contratti.')
+      flash('error', 'Impossibile eliminare: questo modello ha lavori associati. Elimina prima i lavori.')
       return
     }
     if (!confirm('Eliminare questo modello?')) return
@@ -91,7 +101,7 @@ export default function Models() {
     <>
       <div className="page-header">
         <h2>Modelli</h2>
-        <p>Archivio modelli con scuola e agente associati</p>
+        <p>Archivio modelli con agenzia, scuola o agente associati</p>
       </div>
 
       <div className="card">
@@ -107,6 +117,19 @@ export default function Models() {
             <div className="field">
               <label>Cognome *</label>
               <input value={form.last_name} onChange={e => set('last_name', e.target.value)} placeholder="Ferrari" />
+            </div>
+          </div>
+          <div className="form-row-2">
+            <div className="field">
+              <label>Agenzia *</label>
+              <select value={form.agency_id} onChange={e => set('agency_id', e.target.value)} required>
+                <option value="">— seleziona —</option>
+                {agencies.map(a => <option key={a.id} value={a.id}>{a.name} ({a.hunt_pct}%)</option>)}
+              </select>
+            </div>
+            <div className="field">
+              <label>Data firma con Hunt</label>
+              <input type="date" value={form.hunt_signed_at} onChange={e => set('hunt_signed_at', e.target.value)} />
             </div>
           </div>
           <div className="form-row-2">
@@ -163,18 +186,20 @@ export default function Models() {
             <div className="table-wrap">
               <table>
                 <thead>
-                  <tr><th>Nome</th><th>Scuola</th><th>Agente</th><th>Note</th><th></th></tr>
+                  <tr><th>Nome</th><th>Agenzia</th><th>Scuola</th><th>Agente</th><th>Firma Hunt</th><th>Note</th><th></th></tr>
                 </thead>
                 <tbody>
                   {models.map(m => (
                     <tr key={m.id} style={editing === m.id ? { background: '#fffbf0' } : {}}>
                       <td style={{ fontWeight: 500 }}>{m.last_name} {m.first_name}</td>
+                      <td>{m.agencies?.name ?? <span style={{ color: 'var(--text-3)' }}>—</span>}</td>
                       <td>{m.schools?.name ?? <span style={{ color: 'var(--text-3)' }}>—</span>}</td>
                       <td>
                         {m.agents?.name
                           ? m.agents.name
                           : <span style={{ color: 'var(--text-3)' }}>—</span>}
                       </td>
+                      <td style={{ fontSize: 13, color: 'var(--text-2)' }}>{m.hunt_signed_at ?? '—'}</td>
                       <td style={{ fontSize: 13, color: 'var(--text-2)' }}>{m.notes}</td>
                       <td>
                         <div style={{ display: 'flex', gap: 6 }}>

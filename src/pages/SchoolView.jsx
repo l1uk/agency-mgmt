@@ -99,7 +99,7 @@ export default function SchoolView() {
                   <th>Modello</th><th>Cliente</th><th>Data incasso</th>
                   <th>Importo</th><th>Mese</th><th>% MD</th><th>€ MD</th>
                   {school?.giorgio && <th>€ Giorgio</th>}
-                  <th>Stato contratto</th>
+                  <th>Stato lavoro</th>
                 </tr>
               </thead>
               <tbody>

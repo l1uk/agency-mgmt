@@ -339,7 +339,8 @@ select
   
   total_paid_by_model(m.id, py.paid_at)        as cumulative_paid,
 
-  -- quota MD
+  -- calcoli basati sull'importo HUNT dell'agenzia (hunt_theoretical_amount)
+  -- md_pct: percentuale MD come prima
   case when m.school_id is not null
     then md_pct(
       months_since_first_payment(m.id, py.paid_at),
@@ -348,17 +349,22 @@ select
     else 0
   end as md_pct,
 
-  round(py.amount *
+  -- importo HUNT teorico (su cui si calcolano MD/Agente/Giorgio)
+  round(py.amount * coalesce(a.hunt_pct, 0) / 100, 2) as hunt_amount,
+
+  -- quota MD calcolata su hunt_amount
+  round(
+    round(py.amount * coalesce(a.hunt_pct, 0) / 100, 2) *
     case when m.school_id is not null
       then md_pct(
         months_since_first_payment(m.id, py.paid_at),
         total_paid_by_model(m.id, py.paid_at)
       )
       else 0
-    end / 100, 2
-  ) as md_amount,
+    end / 100
+  , 2) as md_amount,
 
-  -- quota agente
+  -- quota agente: percentuale e importo calcolato su hunt_amount
   case when m.agent_id is not null
     then agent_pct(
       c.first_job_date, py.paid_at, c.exclusive,
@@ -369,7 +375,8 @@ select
     else 0
   end as agent_pct,
 
-  round(py.amount *
+  round(
+    round(py.amount * coalesce(a.hunt_pct, 0) / 100, 2) *
     case when m.agent_id is not null
       then agent_pct(
         c.first_job_date, py.paid_at, c.exclusive,
@@ -378,76 +385,44 @@ select
         coalesce(ag.commission_pct_month13, 5)
       )
       else 0
-    end / 100, 2
-  ) as agent_amount,
+    end / 100
+  , 2) as agent_amount,
 
-  -- residuo hunt models lordo
-  round(py.amount * (
-    100
-    - case when m.school_id is not null
-        then md_pct(
-          months_since_first_payment(m.id, py.paid_at),
-          total_paid_by_model(m.id, py.paid_at)
-        )
-        else 0
-      end
-    - case when m.agent_id is not null
-        then agent_pct(
-          c.first_job_date, py.paid_at, c.exclusive,
-          coalesce(ag.commission_pct_exclusive, 10),
-          coalesce(ag.commission_pct_open, 7),
-          coalesce(ag.commission_pct_month13, 5)
-        )
-        else 0
-      end
-  ) / 100, 2) as hunt_models_gross,
-
-  -- quota giorgio (20% del residuo, solo modelli MD con giorgio=true) → assegnata a Giorgio agente
+  -- quota giorgio (20% dell'HUNT teorico), solo per modelli MD con giorgio=true
   case when m.school_id is not null and coalesce(s.giorgio, false) = true
-    then round(
-      round(py.amount * (
-        100 - md_pct(
-          months_since_first_payment(m.id, py.paid_at),
-          total_paid_by_model(m.id, py.paid_at)
-        )
-      ) / 100, 2) * 0.20
-    , 2)
+    then round(round(py.amount * coalesce(a.hunt_pct, 0) / 100, 2) * 0.20, 2)
     else 0
   end as giorgio_amount,
 
-  -- hunt models netto (dopo giorgio)
-  round(py.amount * (
-    100
-    - case when m.school_id is not null
-        then md_pct(
-          months_since_first_payment(m.id, py.paid_at),
-          total_paid_by_model(m.id, py.paid_at)
-        )
+  -- hunt models netto: hunt_amount meno MD/Agente/Giorgio
+  ( round(py.amount * coalesce(a.hunt_pct, 0) / 100, 2)
+    - round(
+        round(py.amount * coalesce(a.hunt_pct, 0) / 100, 2) *
+        case when m.school_id is not null
+          then md_pct(
+            months_since_first_payment(m.id, py.paid_at),
+            total_paid_by_model(m.id, py.paid_at)
+          )
+          else 0
+        end / 100
+      , 2)
+    - round(
+        round(py.amount * coalesce(a.hunt_pct, 0) / 100, 2) *
+        case when m.agent_id is not null
+          then agent_pct(
+            c.first_job_date, py.paid_at, c.exclusive,
+            coalesce(ag.commission_pct_exclusive, 10),
+            coalesce(ag.commission_pct_open, 7),
+            coalesce(ag.commission_pct_month13, 5)
+          )
+          else 0
+        end / 100
+      , 2)
+    - case when m.school_id is not null and coalesce(s.giorgio, false) = true
+        then round(round(py.amount * coalesce(a.hunt_pct, 0) / 100, 2) * 0.20, 2)
         else 0
       end
-    - case when m.agent_id is not null
-        then agent_pct(
-          c.first_job_date, py.paid_at, c.exclusive,
-          coalesce(ag.commission_pct_exclusive, 10),
-          coalesce(ag.commission_pct_open, 7),
-          coalesce(ag.commission_pct_month13, 5)
-        )
-        else 0
-      end
-  ) / 100, 2)
-  -
-  case when m.school_id is not null and coalesce(s.giorgio, false) = true
-    then round(
-      round(py.amount * (
-        100 - md_pct(
-          months_since_first_payment(m.id, py.paid_at),
-          total_paid_by_model(m.id, py.paid_at)
-        )
-      ) / 100, 2) * 0.20
-    , 2)
-    else 0
-  end
-  as hunt_models_net
+  ) as hunt_models_net
 
 from payments py
 join  contracts c  on c.id  = py.contract_id
