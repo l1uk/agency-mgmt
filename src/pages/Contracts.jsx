@@ -1,6 +1,8 @@
 import { useState, useEffect } from 'react'
 import { supabase, invokeEdgeFunction, getFreshAccessToken } from '../lib/supabase'
 import Payments from './Payments'
+import { formatDateShort } from '../lib/format'
+import DateInput from '../components/DateInput'
 import SearchableSelect from '../components/SearchableSelect'
 
 const fmt = n => '€' + parseFloat(n || 0).toLocaleString('it-IT', { minimumFractionDigits: 2 })
@@ -145,11 +147,7 @@ export default function Jobs() {
           {/* start_date/end_date removed from form per domain change */}
           <div className="field">
             <label>Data primo job confermato</label>
-            <input
-              type="date"
-              value={form.first_job_date}
-              onChange={e => set('first_job_date', e.target.value)}
-            />
+            <DateInput value={form.first_job_date} onChange={v => set('first_job_date', v)} />
           </div>
           <div className="form-row-2">
             <SearchableSelect
@@ -209,7 +207,7 @@ export default function Jobs() {
                     <span style={{ fontWeight: 400, color: 'var(--text-2)', marginLeft: 8 }}>— {c.client_name}</span>
                   </div>
                         <div style={{ fontSize: 12, color: 'var(--text-3)', marginTop: 2 }}>
-                          {c.first_job_date ?? c.created_at}
+                          {formatDateShort(c.first_job_date ?? c.created_at)}
                           {c.exclusive && <span style={{ marginLeft: 8 }}>· Esclusiva</span>}
                         </div>
                 </div>

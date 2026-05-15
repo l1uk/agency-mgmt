@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '../lib/supabase'
+import { formatDateShort } from '../lib/format'
 
 const fmt = n => '€' + parseFloat(n || 0).toLocaleString('it-IT', { minimumFractionDigits: 2 })
 
@@ -92,7 +93,7 @@ export default function Dashboard() {
                       <td>{r.models?.first_name} {r.models?.last_name}</td>
                       <td>{r.client_name}</td>
                       <td style={{ fontSize: 13, color: 'var(--text-2)' }}>
-                        {r.first_job_date ?? r.created_at}
+                        {formatDateShort(r.first_job_date ?? r.created_at)}
                       </td>
                       <td><span className={`badge badge-${r.status}`}>{r.status}</span></td>
                     </tr>

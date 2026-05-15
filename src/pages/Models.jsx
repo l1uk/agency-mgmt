@@ -1,6 +1,8 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '../lib/supabase'
 import SearchableSelect from '../components/SearchableSelect'
+import { formatDateShort } from '../lib/format'
+import DateInput from '../components/DateInput'
 
 const empty = { first_name: '', last_name: '', agency_id: '', hunt_signed_at: '', school_id: '', agent_id: '', notes: '' }
 
@@ -135,7 +137,7 @@ export default function Models() {
             />
             <div className="field">
               <label>Data firma con Hunt</label>
-              <input type="date" value={form.hunt_signed_at} onChange={e => set('hunt_signed_at', e.target.value)} />
+              <DateInput value={form.hunt_signed_at} onChange={v => set('hunt_signed_at', v)} />
             </div>
           </div>
           <div className="form-row-2">
@@ -193,7 +195,7 @@ export default function Models() {
                           ? m.agents.name
                           : <span style={{ color: 'var(--text-3)' }}>—</span>}
                       </td>
-                      <td style={{ fontSize: 13, color: 'var(--text-2)' }}>{m.hunt_signed_at ?? '—'}</td>
+                      <td style={{ fontSize: 13, color: 'var(--text-2)' }}>{formatDateShort(m.hunt_signed_at)}</td>
                       <td style={{ fontSize: 13, color: 'var(--text-2)' }}>{m.notes}</td>
                       <td>
                         <div style={{ display: 'flex', gap: 6 }}>

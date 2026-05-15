@@ -59,7 +59,7 @@ export default function Commissions() {
       </div>
 
       <div className="stats-grid">
-        <div className="stat-card"><div className="stat-label">Incassato totale</div><div className="stat-value" style={{ fontSize: 19 }}>{fmt(totals.amount)}</div></div>
+        <div className="stat-card"><div className="stat-label">Volume totale</div><div className="stat-value" style={{ fontSize: 19 }}>{fmt(totals.amount)}</div></div>
         <div className="stat-card"><div className="stat-label">Quota MD</div><div className="stat-value" style={{ fontSize: 19 }}>{fmt(totals.md_amount)}</div></div>
         <div className="stat-card"><div className="stat-label">Quota agenti</div><div className="stat-value" style={{ fontSize: 19 }}>{fmt(totals.agent_amount)}</div></div>
         <div className="stat-card"><div className="stat-label">Quota Giorgio</div><div className="stat-value" style={{ fontSize: 19, color: '#7b5ea7' }}>{fmt(totals.giorgio_amount)}</div></div>

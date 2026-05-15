@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '../lib/supabase'
+import { formatDateShort } from '../lib/format'
 
 const empty = { name: '', hunt_pct: '' }
 
@@ -132,7 +133,7 @@ export default function Agencies() {
                     <tr key={agency.id} style={editing === agency.id ? { background: '#fffbf0' } : {}}>
                       <td style={{ fontWeight: 500 }}>{agency.name}</td>
                       <td className="mono">{agency.hunt_pct}%</td>
-                      <td style={{ fontSize: 13, color: 'var(--text-2)' }}>{agency.created_at?.slice(0, 10)}</td>
+                        <td style={{ fontSize: 13, color: 'var(--text-2)' }}>{formatDateShort(agency.created_at)}</td>
                       <td>
                         <div style={{ display: 'flex', gap: 6 }}>
                           <button className="btn btn-ghost btn-sm" onClick={() => startEdit(agency)}>Modifica</button>

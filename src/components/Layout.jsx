@@ -1,5 +1,6 @@
 import { NavLink, Outlet, useNavigate } from 'react-router-dom'
 import { useAuth } from '../hooks/useAuth'
+import packageJson from '../../package.json'
 
 const links = [
   { to: '/',            icon: '⬡', label: 'Dashboard',   end: true },
@@ -46,6 +47,7 @@ export default function Layout() {
         </div>
 
         <div className="sidebar-footer">
+          <div className="sidebar-version">v{packageJson.version}</div>
           <div className="sidebar-user">{user?.email}</div>
           <button className="btn-signout" onClick={handleSignOut}>Esci</button>
         </div>

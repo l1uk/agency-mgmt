@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '../lib/supabase'
+import DateInput from '../components/DateInput'
 
 const fmt = n => '€' + parseFloat(n || 0).toLocaleString('it-IT', { minimumFractionDigits: 2 })
 
@@ -10,18 +11,40 @@ export default function PendingIncomes() {
   const [editForm, setEditForm] = useState({ paid_at: '', hunt_actual_amount: '' })
   const [modalError, setModalError] = useState('')
 
-  useEffect(() => {
-    async function load() {
-      const { data } = await supabase
-        .from('pending_incomes')
-        .select('*')
-        .order('created_at', { ascending: false })
+  async function load() {
+    setLoading(true)
+    const { data } = await supabase
+      .from('pending_incomes')
+      .select('*')
+      .order('created_at', { ascending: false })
 
-      setRows(data ?? [])
-      setLoading(false)
+    let rowsData = data ?? []
+
+    // For rows missing agency pct in the view, fetch it from contracts->models->agencies
+    const missingContractIds = Array.from(new Set(rowsData.filter(r => r.agency_hunt_pct == null).map(r => r.contract_id).filter(Boolean)))
+    let pctMap = {}
+    if (missingContractIds.length > 0) {
+      const { data: contracts } = await supabase
+        .from('contracts')
+        .select('id, models(agency_id, agencies(hunt_pct))')
+        .in('id', missingContractIds)
+      ;(contracts || []).forEach(c => {
+        const pct = c?.models?.agencies?.hunt_pct
+        pctMap[c.id] = pct ?? 0
+      })
     }
-    load()
-  }, [])
+
+    rowsData = rowsData.map(r => {
+      const pct = (r.agency_hunt_pct != null) ? r.agency_hunt_pct : (pctMap[r.contract_id] ?? 0)
+      const hunt_theoretical_amount = ((parseFloat(r.gross_amount || 0) * (pct || 0)) / 100)
+      return { ...r, agency_hunt_pct: pct, hunt_theoretical_amount }
+    })
+
+    setRows(rowsData)
+    setLoading(false)
+  }
+
+  useEffect(() => { load() }, [])
 
   const canSavePending = () => {
     return !!(editForm.paid_at && editForm.hunt_actual_amount && Number(editForm.hunt_actual_amount) > 0)
@@ -39,8 +62,7 @@ export default function PendingIncomes() {
     if (error) { setModalError(error.message); return }
     setEditingId(null)
     setEditForm({ paid_at: '', hunt_actual_amount: '' })
-    const { data } = await supabase.from('pending_incomes').select('*').order('created_at', { ascending: false })
-    setRows(data ?? [])
+    await load()
   }
 
   const totals = rows.reduce((acc, row) => ({
@@ -101,9 +123,10 @@ export default function PendingIncomes() {
                             <button className="btn btn-ghost btn-sm" onClick={() => {
                               setModalError('')
                               setEditingId(row.payment_id)
+                              const today = new Date().toISOString().slice(0,10)
                               setEditForm({
-                                paid_at: row.paid_at ?? '',
-                                hunt_actual_amount: '',
+                                paid_at: row.paid_at ?? today,
+                                hunt_actual_amount: row.hunt_theoretical_amount != null ? parseFloat(row.hunt_theoretical_amount).toFixed(2) : '',
                               })
                             }}>Segna come incassato / Modifica</button>
                           </div>
@@ -130,7 +153,7 @@ export default function PendingIncomes() {
             <div style={{ display: 'flex', gap: 12, marginTop: 12 }}>
               <div className="field">
                 <label>Data incasso *</label>
-                <input type="date" value={editForm.paid_at} onChange={e => setEditForm(f => ({ ...f, paid_at: e.target.value }))} />
+                <DateInput value={editForm.paid_at} onChange={v => setEditForm(f => ({ ...f, paid_at: v }))} />
               </div>
               <div className="field">
                 <label>Incasso HUNT € *</label>
