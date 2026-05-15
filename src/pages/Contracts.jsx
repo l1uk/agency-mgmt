@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { supabase, invokeEdgeFunction, getFreshAccessToken } from '../lib/supabase'
 import Payments from './Payments'
+import SearchableSelect from '../components/SearchableSelect'
 
 const fmt = n => '€' + parseFloat(n || 0).toLocaleString('it-IT', { minimumFractionDigits: 2 })
 
@@ -27,6 +28,8 @@ export default function Jobs() {
   const [msg, setMsg]               = useState(null)
   const [loading, setLoading]       = useState(true)
   const [saving, setSaving]         = useState(false)
+
+  const modelOptions = models.map(m => ({ value: m.id, label: `${m.last_name} ${m.first_name}` }))
 
   async function load() {
     const [{ data: j }, { data: m }] = await Promise.all([
@@ -126,13 +129,14 @@ export default function Jobs() {
         {msg && <div className={`alert alert-${msg.type === 'error' ? 'error' : 'success'}`}>{msg.text}</div>}
         <form onSubmit={handleSubmit} className="form-grid">
           <div className="form-row-2">
-            <div className="field">
-              <label>Modello *</label>
-              <select value={form.model_id} onChange={e => set('model_id', e.target.value)} required>
-                <option value="">— seleziona —</option>
-                {models.map(m => <option key={m.id} value={m.id}>{m.last_name} {m.first_name}</option>)}
-              </select>
-            </div>
+            <SearchableSelect
+              label="Modello"
+              value={form.model_id}
+              onChange={value => set('model_id', value)}
+              options={modelOptions}
+              placeholder="Seleziona modello"
+              required
+            />
             <div className="field">
               <label>Cliente *</label>
               <input value={form.client_name} onChange={e => set('client_name', e.target.value)} placeholder="Vogue Italia" />
@@ -148,22 +152,30 @@ export default function Jobs() {
             />
           </div>
           <div className="form-row-2">
-            <div className="field">
-              <label>Tipo inserimento</label>
-              <select value={form.exclusive} onChange={e => set('exclusive', e.target.value)}>
-                <option value="true">In esclusiva</option>
-                <option value="false">Non in esclusiva</option>
-              </select>
-            </div>
-            <div className="field">
-              <label>Stato</label>
-              <select value={form.status} onChange={e => set('status', e.target.value)}>
-                <option value="active">Attivo</option>
-                <option value="expiring">In scadenza</option>
-                <option value="expired">Scaduto</option>
-                <option value="cancelled">Annullato</option>
-              </select>
-            </div>
+            <SearchableSelect
+              label="Tipo inserimento"
+              value={form.exclusive}
+              onChange={value => set('exclusive', value)}
+              options={[
+                { value: 'true', label: 'In esclusiva' },
+                { value: 'false', label: 'Non in esclusiva' },
+              ]}
+              placeholder="Seleziona tipo"
+              required
+            />
+            <SearchableSelect
+              label="Stato"
+              value={form.status}
+              onChange={value => set('status', value)}
+              options={[
+                { value: 'active', label: 'Attivo' },
+                { value: 'expiring', label: 'In scadenza' },
+                { value: 'expired', label: 'Scaduto' },
+                { value: 'cancelled', label: 'Annullato' },
+              ]}
+              placeholder="Seleziona stato"
+              required
+            />
           </div>
           <div style={{ display: 'flex', gap: 10 }}>
             <button type="submit" className="btn btn-primary" disabled={saving}>

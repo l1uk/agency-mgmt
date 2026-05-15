@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { supabase, invokeEdgeFunction, getFreshAccessToken } from '../lib/supabase'
+import SearchableSelect from '../components/SearchableSelect'
 
 const emptySchool = { name: '', email: '', giorgio: false }
 const emptyRule   = { school_id: '', min_months: '', max_months: '', commission_pct: '' }
@@ -12,6 +13,8 @@ export default function Schools() {
   const [editingS, setEditingS]   = useState(null)
   const [msg, setMsg]             = useState(null)
   const [loading, setLoading]     = useState(true)
+
+  const schoolOptions = schools.map(s => ({ value: s.id, label: s.name }))
 
   async function load() {
     const [{ data: s }, { data: r }] = await Promise.all([
@@ -189,13 +192,14 @@ export default function Schools() {
         </p>
         <form onSubmit={addRule} className="form-grid">
           <div className="form-row-2">
-            <div className="field">
-              <label>Scuola *</label>
-              <select value={rForm.school_id} onChange={e => setRForm(f => ({ ...f, school_id: e.target.value }))}>
-                <option value="">— seleziona —</option>
-                {schools.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
-              </select>
-            </div>
+            <SearchableSelect
+              label="Scuola"
+              value={rForm.school_id}
+              onChange={value => setRForm(f => ({ ...f, school_id: value }))}
+              options={schoolOptions}
+              placeholder="Seleziona scuola"
+              required
+            />
             <div className="field">
               <label>Percentuale % *</label>
               <input type="number" step="0.01" min="0" max="100"

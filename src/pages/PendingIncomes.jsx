@@ -7,7 +7,8 @@ export default function PendingIncomes() {
   const [rows, setRows] = useState([])
   const [loading, setLoading] = useState(true)
   const [editingId, setEditingId] = useState(null)
-  const [editForm, setEditForm] = useState({ gross_amount: '', paid_at: '', hunt_actual_amount: '', notes: '' })
+  const [editForm, setEditForm] = useState({ paid_at: '', hunt_actual_amount: '' })
+  const [modalError, setModalError] = useState('')
 
   useEffect(() => {
     async function load() {
@@ -21,6 +22,26 @@ export default function PendingIncomes() {
     }
     load()
   }, [])
+
+  const canSavePending = () => {
+    return !!(editForm.paid_at && editForm.hunt_actual_amount && Number(editForm.hunt_actual_amount) > 0)
+  }
+
+  const savePending = async () => {
+    setModalError('')
+    if (!canSavePending()) { setModalError('Inserisci data e importo HUNT valido.'); return }
+    setLoading(true)
+    const { error } = await supabase.from('payments').update({
+      paid_at: editForm.paid_at || null,
+      hunt_actual_amount: editForm.paid_at ? (editForm.hunt_actual_amount ? parseFloat(editForm.hunt_actual_amount) : null) : null,
+    }).eq('id', editingId)
+    setLoading(false)
+    if (error) { setModalError(error.message); return }
+    setEditingId(null)
+    setEditForm({ paid_at: '', hunt_actual_amount: '' })
+    const { data } = await supabase.from('pending_incomes').select('*').order('created_at', { ascending: false })
+    setRows(data ?? [])
+  }
 
   const totals = rows.reduce((acc, row) => ({
     gross: acc.gross + parseFloat(row.gross_amount || 0),
@@ -76,40 +97,16 @@ export default function PendingIncomes() {
                         <td style={{ textAlign: 'center', color: 'var(--text-2)' }}>{row.days_pending}</td>
                         <td style={{ fontSize: 13, color: 'var(--text-2)' }}>{row.payment_notes ?? '—'}</td>
                         <td style={{ width: 220 }}>
-                          {editingId === row.payment_id ? (
-                            <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                              <input type="date" value={editForm.paid_at} onChange={e => setEditForm(f => ({ ...f, paid_at: e.target.value }))} />
-                              <input type="number" step="0.01" min="0" style={{ width: 120 }} value={editForm.gross_amount} onChange={e => setEditForm(f => ({ ...f, gross_amount: e.target.value }))} />
-                              <button className="btn btn-primary btn-sm" onClick={async () => {
-                                setLoading(true)
-                                const { error } = await supabase.from('payments').update({
-                                  amount: parseFloat(editForm.gross_amount) || null,
-                                  paid_at: editForm.paid_at || null,
-                                  hunt_actual_amount: editForm.paid_at ? (editForm.hunt_actual_amount ? parseFloat(editForm.hunt_actual_amount) : null) : null,
-                                  notes: editForm.notes || null,
-                                }).eq('id', row.payment_id)
-                                setLoading(false)
-                                if (error) return alert(error.message)
-                                setEditingId(null)
-                                setEditForm({ gross_amount: '', paid_at: '', hunt_actual_amount: '', notes: '' })
-                                const { data } = await supabase.from('pending_incomes').select('*').order('created_at', { ascending: false })
-                                setRows(data ?? [])
-                              }}>Salva</button>
-                              <button className="btn btn-ghost btn-sm" onClick={() => { setEditingId(null); setEditForm({ gross_amount: '', paid_at: '', hunt_actual_amount: '', notes: '' }) }}>Annulla</button>
-                            </div>
-                          ) : (
-                            <div style={{ display: 'flex', gap: 8 }}>
-                              <button className="btn btn-ghost btn-sm" onClick={() => {
-                                setEditingId(row.payment_id)
-                                setEditForm({
-                                  gross_amount: row.gross_amount ?? '',
-                                  paid_at: row.paid_at ?? '',
-                                  hunt_actual_amount: row.hunt_actual_amount ?? '',
-                                  notes: row.payment_notes ?? '',
-                                })
-                              }}>Segna come incassato / Modifica</button>
-                            </div>
-                          )}
+                          <div style={{ display: 'flex', gap: 8 }}>
+                            <button className="btn btn-ghost btn-sm" onClick={() => {
+                              setModalError('')
+                              setEditingId(row.payment_id)
+                              setEditForm({
+                                paid_at: row.paid_at ?? '',
+                                hunt_actual_amount: '',
+                              })
+                            }}>Segna come incassato / Modifica</button>
+                          </div>
                         </td>
                       </tr>
                   ))}
@@ -118,6 +115,48 @@ export default function PendingIncomes() {
             </div>
           )}
       </div>
+      {/* Modal per dichiarare incasso */}
+      {editingId && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 60 }}>
+          <div
+            onKeyDown={e => { if (e.key === 'Enter') e.preventDefault() }}
+            style={{ background: 'white', padding: 20, borderRadius: 8, width: 720, maxWidth: '95%' }}
+          >
+            <h3>Segna incasso</h3>
+            <div style={{ marginTop: 6, fontSize: 13, color: 'var(--text-2)' }}>
+              Importo lavoro: <strong>{fmt(rows.find(r => r.payment_id === editingId)?.gross_amount)}</strong> ·
+              HUNT teorico: <strong>{fmt(rows.find(r => r.payment_id === editingId)?.hunt_theoretical_amount)}</strong>
+            </div>
+            <div style={{ display: 'flex', gap: 12, marginTop: 12 }}>
+              <div className="field">
+                <label>Data incasso *</label>
+                <input type="date" value={editForm.paid_at} onChange={e => setEditForm(f => ({ ...f, paid_at: e.target.value }))} />
+              </div>
+              <div className="field">
+                <label>Incasso HUNT € *</label>
+                <input
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  value={editForm.hunt_actual_amount}
+                  placeholder={rows.find(r => r.payment_id === editingId)?.hunt_theoretical_amount ?? ''}
+                  onChange={e => setEditForm(f => ({ ...f, hunt_actual_amount: e.target.value }))}
+                />
+              </div>
+            </div>
+            {modalError && <div className="alert alert-error" style={{ marginTop: 8 }}>{modalError}</div>}
+            <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 12 }}>
+              <button className="btn btn-ghost" onClick={() => { setEditingId(null); setEditForm({ paid_at: '', hunt_actual_amount: '' }) }}>Annulla</button>
+              <button
+                type="button"
+                className="btn btn-primary"
+                disabled={!canSavePending() || loading}
+                onClick={savePending}
+              >Salva incasso</button>
+            </div>
+          </div>
+        </div>
+      )}
     </>
   )
 }

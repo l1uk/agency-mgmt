@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '../lib/supabase'
+import SearchableSelect from '../components/SearchableSelect'
 
 const empty = { first_name: '', last_name: '', agency_id: '', hunt_signed_at: '', school_id: '', agent_id: '', notes: '' }
 
@@ -13,6 +14,10 @@ export default function Models() {
   const [msg, setMsg]           = useState(null)
   const [loading, setLoading]   = useState(true)
   const [saving, setSaving]     = useState(false)
+
+  const agencyOptions = agencies.map(a => ({ value: a.id, label: `${a.name} (${a.hunt_pct}%)` }))
+  const schoolOptions = schools.map(s => ({ value: s.id, label: s.name }))
+  const agentOptions  = agents.map(a => ({ value: a.id, label: a.name }))
 
   async function load() {
     const [{ data: m }, { data: ag }, { data: s }, { data: a }] = await Promise.all([
@@ -120,48 +125,37 @@ export default function Models() {
             </div>
           </div>
           <div className="form-row-2">
-            <div className="field">
-              <label>Agenzia *</label>
-              <select value={form.agency_id} onChange={e => set('agency_id', e.target.value)} required>
-                <option value="">— seleziona —</option>
-                {agencies.map(a => <option key={a.id} value={a.id}>{a.name} ({a.hunt_pct}%)</option>)}
-              </select>
-            </div>
+            <SearchableSelect
+              label="Agenzia"
+              value={form.agency_id}
+              onChange={value => set('agency_id', value)}
+              options={agencyOptions}
+              placeholder="Seleziona agenzia"
+              required
+            />
             <div className="field">
               <label>Data firma con Hunt</label>
               <input type="date" value={form.hunt_signed_at} onChange={e => set('hunt_signed_at', e.target.value)} />
             </div>
           </div>
           <div className="form-row-2">
-            <div className="field">
-              <label>
-                Scuola
-                {form.agent_id && <span style={{color:'var(--danger)',fontSize:11,marginLeft:6}}>⚠ non disponibile se c'è un agente</span>}
-              </label>
-              <select value={form.school_id} onChange={e => { set('school_id', e.target.value); if(e.target.value) set('agent_id','') }}>
-                <option value="">— nessuna —</option>
-                {schools.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
-              </select>
-            </div>
-            <div className="field">
-              <label>
-                Agente
-                {form.school_id && <span style={{color:'var(--danger)',fontSize:11,marginLeft:6}}>⚠ non disponibile se c'è una scuola</span>}
-              </label>
-              <select
-                value={form.agent_id}
-                onChange={e => set('agent_id', e.target.value)}
-                disabled={!!form.school_id}
-                style={form.school_id ? {opacity:0.4} : {}}
-              >
-                <option value="">— nessuno —</option>
-                {agents.map(a => (
-                  <option key={a.id} value={a.id}>
-                    {a.name}
-                  </option>
-                ))}
-              </select>
-            </div>
+            <SearchableSelect
+              label={<>Scuola {form.agent_id && <span style={{color:'var(--danger)',fontSize:11,marginLeft:6}}>⚠ non disponibile se c'è un agente</span>}</>}
+              value={form.school_id}
+              onChange={value => { set('school_id', value); if (value) set('agent_id', '') }}
+              options={schoolOptions}
+              emptyLabel="— nessuna —"
+              placeholder="Seleziona scuola"
+            />
+            <SearchableSelect
+              label={<>Agente {form.school_id && <span style={{color:'var(--danger)',fontSize:11,marginLeft:6}}>⚠ non disponibile se c'è una scuola</span>}</>}
+              value={form.agent_id}
+              onChange={value => set('agent_id', value)}
+              options={agentOptions}
+              emptyLabel="— nessuno —"
+              placeholder="Seleziona agente"
+              disabled={!!form.school_id}
+            />
           </div>
           <div className="field">
             <label>Note</label>

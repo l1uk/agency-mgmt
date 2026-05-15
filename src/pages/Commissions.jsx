@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '../lib/supabase'
+import SearchableSelect from '../components/SearchableSelect'
 
 const fmt = n => '€' + parseFloat(n || 0).toLocaleString('it-IT', { minimumFractionDigits: 2 })
 
@@ -70,13 +71,20 @@ export default function Commissions() {
           <input placeholder="Cerca modello..." value={filter.model}
             onChange={e => setFilter(f => ({ ...f, model: e.target.value }))}
             style={{ padding: '7px 12px', border: '1px solid var(--border)', borderRadius: 'var(--radius)', fontSize: 14, fontFamily: 'inherit', flex: 1, minWidth: 160 }} />
-          <select value={filter.type} onChange={e => setFilter(f => ({ ...f, type: e.target.value }))}
-            style={{ padding: '7px 12px', border: '1px solid var(--border)', borderRadius: 'var(--radius)', fontSize: 14, fontFamily: 'inherit' }}>
-            <option value="">Tutti i tipi</option>
-            <option value="school">Solo scuola (MD)</option>
-            <option value="agent">Solo agente</option>
-            <option value="agency">Solo agenzia</option>
-          </select>
+          <div style={{ minWidth: 220, flex: 1 }}>
+            <SearchableSelect
+              label="Tipo"
+              value={filter.type}
+              onChange={value => setFilter(f => ({ ...f, type: value }))}
+              options={[
+                { value: 'school', label: 'Solo scuola (MD)' },
+                { value: 'agent', label: 'Solo agente' },
+                { value: 'agency', label: 'Solo agenzia' },
+              ]}
+              emptyLabel="Tutti i tipi"
+              placeholder="Seleziona tipo"
+            />
+          </div>
           <button className="btn btn-ghost" onClick={() => exportCSV(filtered)}>↓ Esporta CSV</button>
         </div>
 

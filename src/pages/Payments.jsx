@@ -64,16 +64,17 @@ export default function Payments({ contractId, modelName, clientName, firstJobDa
   }
 
   const startEdit = (r) => {
-    setEditingId(r.payment_id)
+    setEditingId(r.payment_id ?? r.id)
     setEditForm({
       gross_amount: r.gross_amount ?? r.amount ?? '',
       paid_at: r.paid_at ?? '',
       hunt_actual_amount: r.hunt_actual_amount ?? '',
-      notes: r.payment_notes ?? ''
+      notes: r.payment_notes ?? r.notes ?? ''
     })
   }
 
   const saveEdit = async (id) => {
+    if (!canSaveEdit()) { flash('error', 'Inserisci data e importo valido.'); return }
     setSaving(true)
     const { error } = await supabase.from('payments').update({
       amount: parseFloat(editForm.gross_amount) || null,
@@ -88,6 +89,10 @@ export default function Payments({ contractId, modelName, clientName, firstJobDa
     flash('success', 'Incasso aggiornato.')
   }
 
+  const canSaveEdit = () => {
+    return !!(editForm.paid_at && editForm.gross_amount && parseFloat(editForm.gross_amount) > 0)
+  }
+
   // totals from commissions view
   const totals = commissions.reduce((acc, r) => ({
     amount:           acc.amount           + parseFloat(r.amount || 0),
@@ -99,6 +104,7 @@ export default function Payments({ contractId, modelName, clientName, firstJobDa
 
   const agencyPct = commissions[0]?.agency_hunt_pct ?? 0
   const theoreticalHunt = parseFloat(form.gross_amount || 0) * parseFloat(agencyPct || 0) / 100
+  const pendingPaymentsCount = payments.filter(p => !p.paid_at).length
 
   return (
     <div style={{ marginTop: 16 }}>
@@ -121,6 +127,12 @@ export default function Payments({ contractId, modelName, clientName, firstJobDa
       <div className="alert alert-success" style={{ marginBottom: 20 }}>
         Percentuale Hunt dell'agenzia: <strong>{agencyPct}%</strong> · importo teorico su questo lavoro: <strong>{fmt(theoreticalHunt)}</strong>
       </div>
+
+      {pendingPaymentsCount > 0 && (
+        <div className="alert alert-error" style={{ marginBottom: 20 }}>
+          Ci sono {pendingPaymentsCount} incass{pendingPaymentsCount === 1 ? 'o' : 'i'} pendent{pendingPaymentsCount === 1 ? 'e' : 'i'} per questo contratto. Apri la sezione Incassi Pendenti per registrarli.
+        </div>
+      )}
 
       {/* Add payment */}
       <form onSubmit={addPayment} className="form-grid" style={{ marginBottom: 20 }}>
@@ -167,12 +179,6 @@ export default function Payments({ contractId, modelName, clientName, firstJobDa
         </div>
       </form>
 
-      {payments.some(p => !p.paid_at) && (
-        <div className="alert alert-error" style={{ marginBottom: 20 }}>
-          Ci sono incassi pendenti su questo lavoro. Li trovi anche nella sezione "Incassi pendenti".
-        </div>
-      )}
-
       {/* Payments + commissions table */}
       {commissions.length > 0 && (
         <>
@@ -206,7 +212,7 @@ export default function Payments({ contractId, modelName, clientName, firstJobDa
                       <td className="mono" style={{ fontWeight: 600, color: 'var(--success)' }}>{fmt(r.hunt_models_net)}</td>
                       <td>
                         <div style={{ display: 'flex', gap: 8 }}>
-                          <button className="btn btn-primary btn-sm" onClick={() => saveEdit(r.payment_id)} disabled={saving}>{saving ? '...' : 'Salva'}</button>
+                          <button type="button" className="btn btn-primary btn-sm" onClick={() => saveEdit(r.payment_id)} disabled={!canSaveEdit() || saving}>{saving ? '...' : 'Salva'}</button>
                           <button className="btn btn-ghost btn-sm" onClick={() => { setEditingId(null); setEditForm({ gross_amount: '', paid_at: '', hunt_actual_amount: '', notes: '' }) }}>Annulla</button>
                         </div>
                       </td>
