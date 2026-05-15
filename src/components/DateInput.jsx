@@ -3,10 +3,22 @@ import { formatDateShort, parseDateShort } from '../lib/format'
 
 export default function DateInput({ value, onChange, id, className, placeholder }) {
   const [text, setText] = useState(value ? formatDateShort(value) : '')
+  const [useNative, setUseNative] = useState(false)
 
   useEffect(() => {
     setText(value ? formatDateShort(value) : '')
   }, [value])
+
+  useEffect(() => {
+    if (typeof window !== 'undefined' && window.matchMedia) {
+      try {
+        const mq = window.matchMedia('(pointer: coarse)')
+        setUseNative(!!mq.matches)
+      } catch (e) {
+        setUseNative(false)
+      }
+    }
+  }, [])
 
   const handleBlur = () => {
     const parsed = parseDateShort(text)
@@ -14,10 +26,14 @@ export default function DateInput({ value, onChange, id, className, placeholder 
       setText(formatDateShort(parsed))
       onChange && onChange(parsed)
     } else {
-      // if empty, clear
       if (!text) onChange && onChange(null)
-      // otherwise keep text but do not call onChange
     }
+  }
+
+  if (useNative) {
+    return (
+      <input id={id} className={className} type="date" value={value || ''} onChange={e => onChange && onChange(e.target.value)} />
+    )
   }
 
   return (

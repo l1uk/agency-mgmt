@@ -498,7 +498,25 @@ tbody tr:hover td { background: var(--surface-2); }
 
 /* ── Responsive ───────────────────────────────────────── */
 @media (max-width: 768px) {
-  .sidebar { display: none; }
+  .sidebar { display: none; transform: translateX(-100%); position: fixed; z-index: 80; top: 0; left: 0; bottom: 0; width: 240px; }
+  .sidebar.open { display: flex; transform: translateX(0); box-shadow: 0 8px 24px rgba(0,0,0,0.12); }
   .main { margin-left: 0; padding: 20px; }
   .form-row-2, .form-row-3 { grid-template-columns: 1fr; }
+}
+
+/* mobile topbar for hamburger */
+.topbar-mobile { display: none; margin-bottom: 12px }
+@media (max-width: 768px) {
+  .topbar-mobile { display: block }
+}
+
+/* touch-scrolling improvement for tables */
+.table-wrap { -webkit-overflow-scrolling: touch; }
+
+/* mobile overlay when sidebar open */
+.mobile-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.35);
+  z-index: 70;
 }
