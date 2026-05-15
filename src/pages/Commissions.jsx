@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '../lib/supabase'
 import SearchableSelect from '../components/SearchableSelect'
+import { formatDateShort } from '../lib/format'
 
 const fmt = n => '€' + parseFloat(n || 0).toLocaleString('it-IT', { minimumFractionDigits: 2 })
 
@@ -107,7 +108,7 @@ export default function Commissions() {
                       {r.school_name ?? r.agent_name ?? <span style={{ color: 'var(--text-3)' }}>Solo agenzia</span>}
                     </td>
                     <td>{r.client_name}</td>
-                    <td style={{ fontSize: 13 }}>{r.paid_at}</td>
+                    <td style={{ fontSize: 13 }}>{formatDateShort(r.paid_at)}</td>
                     <td className="mono">{fmt(r.amount)}</td>
                     <td style={{ textAlign: 'center', fontSize: 13, color: 'var(--text-3)' }}>{r.rel_month_from_first_payment}</td>
                     <td className="mono" style={{ color: r.md_amount > 0 ? 'var(--navy-light)' : 'var(--text-3)' }}>{fmt(r.md_amount)}</td>

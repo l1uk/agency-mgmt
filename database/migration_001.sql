@@ -353,3 +353,88 @@ left join schools s   on s.id  = m.school_id
 left join agents  ag  on ag.id = m.agent_id
 left join agents  giorgio_ag on giorgio_ag.is_giorgio_agent = true
 where py.paid_at is not null;
+
+DROP VIEW IF EXISTS public.payment_commissions CASCADE;
+
+CREATE VIEW public.payment_commissions AS
+WITH base_calculations AS (
+    SELECT 
+        py.id AS payment_id,
+        py.contract_id AS job_id,
+        py.amount AS gross_amount,
+        py.paid_at,
+        py.notes AS payment_notes,
+        c.client_name,
+        c.exclusive,
+        c.first_job_date AS job_date,
+        c.status AS job_status,
+        m.id AS model_id,
+        (m.first_name || ' ' || m.last_name) AS model_name,
+        a.name AS agency_name,
+        COALESCE(a.hunt_pct, 0) / 100 AS hunt_factor,
+        -- 1. Base Hunt Teorica
+        ROUND(py.amount * (COALESCE(a.hunt_pct, 0) / 100), 2) AS hunt_amount,
+        m.school_id,
+        m.agent_id,
+        s.giorgio AS school_has_giorgio,
+        ag.commission_pct_exclusive,
+        ag.commission_pct_open,
+        ag.commission_pct_month13
+    FROM public.payments py
+    JOIN public.contracts c ON c.id = py.contract_id
+    JOIN public.models m ON m.id = c.model_id
+    LEFT JOIN public.agencies a ON a.id = m.agency_id
+    LEFT JOIN public.schools s ON s.id = m.school_id
+    LEFT JOIN public.agents ag ON ag.id = m.agent_id
+    WHERE py.paid_at IS NOT NULL
+),
+commissions_step AS (
+    SELECT 
+        *,
+        -- Calcolo del mese (t=0 dalla data job)
+        (EXTRACT(year FROM age(paid_at, job_date)) * 12 + EXTRACT(month FROM age(paid_at, job_date)))::int AS job_month,
+        -- 2. Quota MD
+        ROUND(hunt_amount * (
+            CASE WHEN school_id IS NOT NULL THEN 
+                public.md_pct(
+                    (EXTRACT(year FROM age(paid_at, job_date)) * 12 + EXTRACT(month FROM age(paid_at, job_date)))::int,
+                    public.total_paid_by_model(model_id, paid_at)
+                )
+            ELSE 0 END
+        ) / 100, 2) AS md_amount,
+        -- 3. Quota Agente
+        ROUND(hunt_amount * (
+            CASE WHEN agent_id IS NOT NULL THEN 
+                public.agent_pct(
+                    job_date, paid_at, exclusive, 
+                    COALESCE(commission_pct_exclusive, 10), 
+                    COALESCE(commission_pct_open, 7), 
+                    COALESCE(commission_pct_month13, 5)
+                )
+            ELSE 0 END
+        ) / 100, 2) AS agent_amount
+    FROM base_calculations
+)
+SELECT 
+    *,
+    -- Alias per il frontend (risolve il problema della colonna vuota)
+    job_month AS rel_month_from_first_payment,
+    -- 4. Quota Giorgio (20% del RESIDUO: Hunt - MD)
+    CASE WHEN school_id IS NOT NULL AND COALESCE(school_has_giorgio, false) = true
+        THEN ROUND((hunt_amount - md_amount) * 0.20, 2)
+        ELSE 0 
+    END AS giorgio_amount,
+    -- 5. Hunt Netto Finale
+    (
+        hunt_amount 
+        - md_amount 
+        - agent_amount 
+        - (CASE WHEN school_id IS NOT NULL AND COALESCE(school_has_giorgio, false) = true
+            THEN ROUND((hunt_amount - md_amount) * 0.20, 2)
+            ELSE 0 END)
+    ) AS hunt_models_net
+FROM commissions_step;
+
+-- Permessi e Cache
+GRANT SELECT ON public.payment_commissions TO anon, authenticated;
+NOTIFY pgrst, 'reload schema';

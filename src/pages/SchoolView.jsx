@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../hooks/useAuth'
+import { formatDateShort } from '../lib/format'
 
 const fmt = n => '€' + parseFloat(n || 0).toLocaleString('it-IT', { minimumFractionDigits: 2 })
 
@@ -109,7 +110,7 @@ export default function SchoolView() {
                     <tr key={r.payment_id}>
                       <td style={{ fontWeight: 500 }}>{r.model_name}</td>
                       <td>{r.client_name}</td>
-                      <td style={{ fontSize: 13 }}>{r.paid_at}</td>
+                      <td style={{ fontSize: 13 }}>{formatDateShort(r.paid_at)}</td>
                       <td className="mono">{fmt(r.amount)}</td>
                       <td style={{ textAlign: 'center', fontSize: 13, color: 'var(--text-3)' }}>{r.rel_month_from_first_payment}</td>
                       <td style={{ fontWeight: 600, color: 'var(--navy-light)' }}>{r.md_pct}%</td>
