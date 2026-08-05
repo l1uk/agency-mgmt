@@ -643,3 +643,5 @@ create policy "agent_read" on payments
 -- -- verifica: deve mostrare md_pct=8, giorgio_amount=147.2, hunt_models_net=588.8
 -- select model_name, amount, md_pct, md_amount, giorgio_amount, hunt_models_net
 -- from payment_commissions;
+ALTER TABLE contracts ADD COLUMN start_date date;
+ALTER TABLE contracts ADD COLUMN end_date date;
