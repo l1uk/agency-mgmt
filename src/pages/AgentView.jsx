@@ -9,7 +9,7 @@ const fmt = n => '€' + parseFloat(n || 0).toLocaleString('it-IT', { minimumFra
 function exportCSV(rows, agentName) {
   const headers = ['Modello', 'Cliente', 'Data incasso', 'Importo', 'Mese rel.', '% Agente', '€ Agente']
   const lines = rows.map(r => [
-    r.model_name, r.client_name, r.paid_at, r.amount,
+    r.model_name, r.client_name, r.paid_at, r.gross_amount ?? r.amount,
     r.rel_month_from_first_payment, r.agent_pct, r.agent_amount
   ].join(';'))
   const csv  = [headers.join(';'), ...lines].join('\n')
@@ -56,8 +56,8 @@ export default function AgentView() {
   )
 
   const totals = filtered.reduce((acc, r) => ({
-    amount:       acc.amount       + parseFloat(r.amount || 0),
-    agent_amount: acc.agent_amount + parseFloat(r.agent_amount || 0),
+    amount:       acc.amount       + parseFloat(r.gross_amount ?? r.amount ?? 0),
+    agent_amount: acc.agent_amount + parseFloat(r.agent_amount ?? 0),
   }), { amount: 0, agent_amount: 0 })
 
   if (loading) return <div className="loading">Caricamento...</div>
@@ -120,7 +120,7 @@ export default function AgentView() {
                       <td style={{ fontWeight: 500 }}>{r.model_name}</td>
                       <td>{r.client_name}</td>
                       <td style={{ fontSize: 13 }}>{formatDateShort(r.paid_at)}</td>
-                      <td className="mono">{fmt(r.amount)}</td>
+                      <td className="mono">{fmt(r.gross_amount ?? r.amount)}</td>
                       <td style={{ textAlign: 'center', color: 'var(--text-2)', fontSize: 13 }}>{r.rel_month_from_first_payment}</td>
                       <td style={{ fontWeight: 600, color: 'var(--accent-dim)' }}>{r.agent_pct}%</td>
                       <td className="mono" style={{ fontWeight: 600 }}>{fmt(r.agent_amount)}</td>

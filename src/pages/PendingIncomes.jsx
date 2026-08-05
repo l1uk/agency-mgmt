@@ -66,8 +66,8 @@ export default function PendingIncomes() {
   }
 
   const totals = rows.reduce((acc, row) => ({
-    gross: acc.gross + parseFloat(row.gross_amount || 0),
-    hunt: acc.hunt + parseFloat(row.hunt_theoretical_amount || 0),
+    gross: acc.gross + parseFloat(row.gross_amount ?? row.amount ?? 0),
+    hunt: acc.hunt + parseFloat(row.hunt_theoretical_amount ?? 0),
   }), { gross: 0, hunt: 0 })
 
   if (loading) return <div className="loading">Caricamento...</div>

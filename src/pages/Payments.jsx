@@ -5,7 +5,7 @@ import DateInput from '../components/DateInput'
 
 const fmt = n => '€' + parseFloat(n || 0).toLocaleString('it-IT', { minimumFractionDigits: 2 })
 
-export default function Payments({ contractId, modelName, clientName, firstJobDate, onFirstJobChange }) {
+export default function Payments({ contractId, modelName, clientName, firstJobDate, onFirstJobChange, onPaymentsChange }) {
   const [payments, setPayments] = useState([])
   const [commissions, setCommissions] = useState([])
   const [form, setForm] = useState({ gross_amount: '', paid_at: '', hunt_actual_amount: '', notes: '' })
@@ -76,13 +76,15 @@ export default function Payments({ contractId, modelName, clientName, firstJobDa
     if (error) { flash('error', error.message); return }
     flash('success', 'Incasso registrato.')
     setForm({ gross_amount: '', paid_at: '', hunt_actual_amount: '', notes: '' })
-    load()
+    await load()
+    onPaymentsChange?.()
   }
 
   const deletePayment = async (id) => {
     if (!confirm('Eliminare questo incasso?')) return
     await supabase.from('payments').delete().eq('id', id)
-    load()
+    await load()
+    onPaymentsChange?.()
   }
 
   const startEdit = (r) => {
@@ -114,7 +116,8 @@ export default function Payments({ contractId, modelName, clientName, firstJobDa
     setSaving(false)
     if (error) { flash('error', error.message); return }
     setEditingId(null)
-    load()
+    await load()
+    onPaymentsChange?.()
     flash('success', 'Incasso aggiornato.')
   }
 
@@ -122,18 +125,30 @@ export default function Payments({ contractId, modelName, clientName, firstJobDa
     return !!(editForm.paid_at && editForm.gross_amount && parseFloat(editForm.gross_amount) > 0)
   }
 
-  // totals from commissions view
-  const totals = commissions.reduce((acc, r) => ({
-    amount:           acc.amount           + parseFloat(r.amount || 0),
-    md_amount:        acc.md_amount        + parseFloat(r.md_amount || 0),
-    agent_amount:     acc.agent_amount     + parseFloat(r.agent_amount || 0),
-    giorgio_amount:   acc.giorgio_amount   + parseFloat(r.giorgio_amount || 0),
-    hunt_models_net:  acc.hunt_models_net  + parseFloat(r.hunt_models_net || 0),
-  }), { amount: 0, md_amount: 0, agent_amount: 0, giorgio_amount: 0, hunt_models_net: 0 })
-
+  const pendingPayments = payments.filter(p => !p.paid_at)
   const agencyPct = commissions[0]?.agency_hunt_pct ?? agencyHuntPct
+
+  // totals from all visible payments (both confirmed commissions and pending payments)
+  const totals = [...commissions, ...pendingPayments].reduce((acc, r) => {
+    const gross = parseFloat(r.gross_amount ?? r.amount ?? 0)
+    const theoretical = r.hunt_theoretical_amount !== undefined
+      ? parseFloat(r.hunt_theoretical_amount || 0)
+      : (gross * parseFloat(agencyPct || 0) / 100)
+    const actual = parseFloat(r.hunt_actual_amount || 0)
+
+    return {
+      amount:                  acc.amount                  + gross,
+      hunt_theoretical_amount: acc.hunt_theoretical_amount + theoretical,
+      hunt_actual_amount:      acc.hunt_actual_amount      + actual,
+      md_amount:               acc.md_amount               + parseFloat(r.md_amount ?? 0),
+      agent_amount:            acc.agent_amount            + parseFloat(r.agent_amount ?? 0),
+      giorgio_amount:          acc.giorgio_amount          + parseFloat(r.giorgio_amount ?? 0),
+      hunt_models_net:         acc.hunt_models_net         + parseFloat(r.hunt_models_net ?? 0),
+    }
+  }, { amount: 0, hunt_theoretical_amount: 0, hunt_actual_amount: 0, md_amount: 0, agent_amount: 0, giorgio_amount: 0, hunt_models_net: 0 })
+
   const theoreticalHunt = parseFloat(form.gross_amount || 0) * parseFloat(agencyPct || 0) / 100
-  const pendingPaymentsCount = payments.filter(p => !p.paid_at).length
+  const pendingPaymentsCount = pendingPayments.length
 
   // Prefill hunt_actual_amount in the form UI when a paid date is set and the field is empty
   useEffect(() => {
@@ -262,12 +277,12 @@ export default function Payments({ contractId, modelName, clientName, firstJobDa
                 ))}
 
                 {/* Pending payments (no paid_at) shown with distinct styling */}
-                {payments.filter(p => !p.paid_at).map(p => (
+                {pendingPayments.map(p => (
                   <tr key={p.id} style={{ background: '#fff7e6' }}>
                     <td style={{ fontSize: 13 }}>{formatDateShort(p.created_at)}</td>
-                    <td className="mono">{fmt(p.amount)}</td>
+                    <td className="mono">{fmt(p.gross_amount ?? p.amount)}</td>
                     <td style={{ textAlign: 'center', color: 'var(--text-2)', fontSize: 13 }}>{agencyPct ?? 0}%</td>
-                    <td className="mono" style={{ color: 'var(--success)' }}>{fmt((p.amount || 0) * (agencyPct || 0) / 100)}</td>
+                    <td className="mono" style={{ color: 'var(--success)' }}>{fmt((parseFloat(p.gross_amount ?? p.amount ?? 0)) * (agencyPct || 0) / 100)}</td>
                     <td className="mono">—</td>
                     <td style={{ textAlign: 'center', color: 'var(--text-2)', fontSize: 13 }}>—</td>
                     <td style={{ color: 'var(--text-3)' }}>—</td>
@@ -287,9 +302,14 @@ export default function Payments({ contractId, modelName, clientName, firstJobDa
                 <tr style={{ background: 'var(--surface-2)', fontWeight: 600 }}>
                   <td>Totale</td>
                   <td className="mono">{fmt(totals.amount)}</td>
-                  <td></td><td></td><td></td><td></td>
-                  <td></td><td className="mono">{fmt(totals.md_amount)}</td>
-                  <td></td><td className="mono">{fmt(totals.agent_amount)}</td>
+                  <td></td>
+                  <td className="mono" style={{ color: 'var(--success)' }}>{fmt(totals.hunt_theoretical_amount)}</td>
+                  <td className="mono">{fmt(totals.hunt_actual_amount)}</td>
+                  <td></td>
+                  <td></td>
+                  <td className="mono">{fmt(totals.md_amount)}</td>
+                  <td></td>
+                  <td className="mono">{fmt(totals.agent_amount)}</td>
                   <td className="mono">{fmt(totals.giorgio_amount)}</td>
                   <td className="mono" style={{ color: 'var(--success)' }}>{fmt(totals.hunt_models_net)}</td>
                   <td></td>

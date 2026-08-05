@@ -31,17 +31,35 @@ export default function Jobs() {
   const [loading, setLoading]       = useState(true)
   const [saving, setSaving]         = useState(false)
 
+  const [paymentsMap, setPaymentsMap] = useState({})
+
   const modelOptions = models.map(m => ({ value: m.id, label: `${m.last_name} ${m.first_name}` }))
 
   async function load() {
-    const [{ data: j }, { data: m }] = await Promise.all([
+    const [{ data: j }, { data: m }, { data: p }] = await Promise.all([
       supabase.from('jobs')
         .select('*, models(first_name, last_name)')
         .order('created_at', { ascending: true }),
       supabase.from('models').select('id, first_name, last_name').order('last_name'),
+      supabase.from('payments').select('contract_id, amount, paid_at'),
     ])
+
+    const pMap = (p ?? []).reduce((acc, row) => {
+      const jobId = row.contract_id
+      if (!acc[jobId]) {
+        acc[jobId] = { total: 0, count: 0, pendingCount: 0 }
+      }
+      acc[jobId].total += parseFloat(row.amount || 0)
+      acc[jobId].count += 1
+      if (!row.paid_at) {
+        acc[jobId].pendingCount += 1
+      }
+      return acc
+    }, {})
+
     setJobs(j ?? [])
     setModels(m ?? [])
+    setPaymentsMap(pMap)
     setLoading(false)
   }
 
@@ -189,55 +207,69 @@ export default function Jobs() {
         <div className="card-title">Tutti i lavori ({jobs.length})</div>
         {jobs.length === 0
           ? <div className="empty">Nessun lavoro ancora registrato.</div>
-          : jobs.map(c => (
-            <div key={c.id} style={{
-              border: '1px solid var(--border)', borderRadius: 'var(--radius)',
-              marginBottom: 12, overflow: 'hidden',
-              ...(editing === c.id ? { borderColor: 'var(--accent)' } : {})
-            }}>
-              {/* Job header row */}
-              <div style={{
-                display: 'flex', alignItems: 'center', gap: 12,
-                padding: '12px 16px', background: 'var(--surface-2)',
-                flexWrap: 'wrap'
+          : jobs.map(c => {
+            const summary = paymentsMap[c.id] || { total: 0, count: 0, pendingCount: 0 }
+            return (
+              <div key={c.id} style={{
+                border: '1px solid var(--border)', borderRadius: 'var(--radius)',
+                marginBottom: 12, overflow: 'hidden',
+                ...(editing === c.id ? { borderColor: 'var(--accent)' } : {})
               }}>
-                <div style={{ flex: 1, minWidth: 200 }}>
-                  <div style={{ fontWeight: 600, fontSize: 14 }}>
-                    {c.models?.last_name} {c.models?.first_name}
-                    <span style={{ fontWeight: 400, color: 'var(--text-2)', marginLeft: 8 }}>— {c.client_name}</span>
+                {/* Job header row */}
+                <div style={{
+                  display: 'flex', alignItems: 'center', gap: 12,
+                  padding: '12px 16px', background: 'var(--surface-2)',
+                  flexWrap: 'wrap'
+                }}>
+                  <div style={{ flex: 1, minWidth: 200 }}>
+                    <div style={{ fontWeight: 600, fontSize: 14 }}>
+                      {c.models?.last_name} {c.models?.first_name}
+                      <span style={{ fontWeight: 400, color: 'var(--text-2)', marginLeft: 8 }}>— {c.client_name}</span>
+                    </div>
+                    <div style={{ fontSize: 12, color: 'var(--text-3)', marginTop: 2 }}>
+                      {formatDateShort(c.first_job_date ?? c.created_at)}
+                      {c.exclusive && <span style={{ marginLeft: 8 }}>· Esclusiva</span>}
+                    </div>
                   </div>
-                        <div style={{ fontSize: 12, color: 'var(--text-3)', marginTop: 2 }}>
-                          {formatDateShort(c.first_job_date ?? c.created_at)}
-                          {c.exclusive && <span style={{ marginLeft: 8 }}>· Esclusiva</span>}
-                        </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+                    <div style={{ textAlign: 'right', paddingRight: 4 }}>
+                      <div className="mono" style={{ fontWeight: 600, fontSize: 14 }}>
+                        {fmt(summary.total)}
+                      </div>
+                      <div style={{ fontSize: 11, color: summary.pendingCount > 0 ? '#d97706' : 'var(--text-3)' }}>
+                        {summary.count === 0
+                          ? 'Nessun incasso'
+                          : `${summary.count} incass${summary.count === 1 ? 'o' : 'i'}${summary.pendingCount > 0 ? ` (${summary.pendingCount} pend.)` : ''}`}
+                      </div>
+                    </div>
+                    {renewalBadge(c)}
+                    <button
+                      className="btn btn-ghost btn-sm"
+                      onClick={() => setExpanded(expanded === c.id ? null : c.id)}
+                    >
+                      {expanded === c.id ? '▲ Incassi' : '▼ Incassi'}
+                    </button>
+                    <button className="btn btn-ghost btn-sm" onClick={() => startEdit(c)}>Modifica</button>
+                    <button className="btn btn-danger btn-sm" onClick={() => deleteJob(c.id)}>✕</button>
+                  </div>
                 </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-                  {renewalBadge(c)}
-                  <button
-                    className="btn btn-ghost btn-sm"
-                    onClick={() => setExpanded(expanded === c.id ? null : c.id)}
-                  >
-                    {expanded === c.id ? '▲ Incassi' : '▼ Incassi'}
-                  </button>
-                  <button className="btn btn-ghost btn-sm" onClick={() => startEdit(c)}>Modifica</button>
-                  <button className="btn btn-danger btn-sm" onClick={() => deleteJob(c.id)}>✕</button>
-                </div>
-              </div>
 
-              {/* Payments panel */}
-              {expanded === c.id && (
-                <div style={{ padding: '16px 20px', borderTop: '1px solid var(--border)' }}>
-                  <Payments
-                    contractId={c.id}
-                    modelName={`${c.models?.first_name} ${c.models?.last_name}`}
-                    clientName={c.client_name}
-                    firstJobDate={c.first_job_date}
-                    onFirstJobChange={() => load()}
-                  />
-                </div>
-              )}
-            </div>
-          ))
+                {/* Payments panel */}
+                {expanded === c.id && (
+                  <div style={{ padding: '16px 20px', borderTop: '1px solid var(--border)' }}>
+                    <Payments
+                      contractId={c.id}
+                      modelName={`${c.models?.first_name} ${c.models?.last_name}`}
+                      clientName={c.client_name}
+                      firstJobDate={c.first_job_date}
+                      onFirstJobChange={() => load()}
+                      onPaymentsChange={() => load()}
+                    />
+                  </div>
+                )}
+              </div>
+            )
+          })
         }
       </div>
     </>

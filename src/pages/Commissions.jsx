@@ -12,7 +12,7 @@ function exportCSV(rows) {
   ]
   const lines = rows.map(r => [
     r.model_name, r.school_name ?? r.agent_name ?? '—', r.client_name,
-    r.paid_at, r.amount, r.rel_month_from_first_payment,
+    r.paid_at, r.gross_amount ?? r.amount, r.rel_month_from_first_payment,
     r.md_pct, r.md_amount, r.agent_pct, r.agent_amount,
     r.giorgio_amount, r.hunt_models_net
   ].join(';'))
@@ -43,11 +43,11 @@ export default function Commissions() {
   })
 
   const totals = filtered.reduce((acc, r) => ({
-    amount:          acc.amount          + parseFloat(r.amount || 0),
-    md_amount:       acc.md_amount       + parseFloat(r.md_amount || 0),
-    agent_amount:    acc.agent_amount    + parseFloat(r.agent_amount || 0),
-    giorgio_amount:  acc.giorgio_amount  + parseFloat(r.giorgio_amount || 0),
-    hunt_models_net: acc.hunt_models_net + parseFloat(r.hunt_models_net || 0),
+    amount:          acc.amount          + parseFloat(r.gross_amount ?? r.amount ?? 0),
+    md_amount:       acc.md_amount       + parseFloat(r.md_amount ?? 0),
+    agent_amount:    acc.agent_amount    + parseFloat(r.agent_amount ?? 0),
+    giorgio_amount:  acc.giorgio_amount  + parseFloat(r.giorgio_amount ?? 0),
+    hunt_models_net: acc.hunt_models_net + parseFloat(r.hunt_models_net ?? 0),
   }), { amount: 0, md_amount: 0, agent_amount: 0, giorgio_amount: 0, hunt_models_net: 0 })
 
   if (loading) return <div className="loading">Caricamento...</div>
@@ -109,7 +109,7 @@ export default function Commissions() {
                     </td>
                     <td>{r.client_name}</td>
                     <td style={{ fontSize: 13 }}>{formatDateShort(r.paid_at)}</td>
-                    <td className="mono">{fmt(r.amount)}</td>
+                    <td className="mono">{fmt(r.gross_amount ?? r.amount)}</td>
                     <td style={{ textAlign: 'center', fontSize: 13, color: 'var(--text-3)' }}>{r.rel_month_from_first_payment}</td>
                     <td className="mono" style={{ color: r.md_amount > 0 ? 'var(--navy-light)' : 'var(--text-3)' }}>{fmt(r.md_amount)}</td>
                     <td className="mono" style={{ color: r.agent_amount > 0 ? 'var(--accent-dim)' : 'var(--text-3)' }}>{fmt(r.agent_amount)}</td>
