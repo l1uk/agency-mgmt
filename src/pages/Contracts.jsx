@@ -14,6 +14,7 @@ const empty = {
 
 const STATUS_LABELS = {
   active: 'Attivo',
+  expiring: 'In scadenza',
   expired: 'Scaduto', cancelled: 'Annullato'
 }
 

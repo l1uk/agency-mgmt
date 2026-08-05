@@ -12,9 +12,10 @@ export default function Dashboard() {
 
   useEffect(() => {
     async function load() {
-      const [{ data: payments }, { data: pendingPayments }, { data: jobs }] = await Promise.all([
+      const [{ data: payments }, { data: pendingPayments }, { data: allJobs }, { data: recentJobs }] = await Promise.all([
         supabase.from('payment_commissions').select('job_id, model_name, gross_amount, hunt_models_net'),
         supabase.from('payments').select('amount').is('paid_at', null),
+        supabase.from('jobs').select('id, model_id, status'),
         supabase
           .from('jobs')
           .select('id, client_name, status, first_job_date, models(first_name, last_name)')
@@ -22,15 +23,15 @@ export default function Dashboard() {
           .limit(6),
       ])
 
-      const active    = jobs?.filter(r => ['active', 'expiring', 'renewed'].includes(r.status)).length ?? 0
+      const active    = allJobs?.filter(r => ['active', 'expiring', 'renewed'].includes(r.status)).length ?? 0
       const volume    = payments?.reduce((s, r) => s + parseFloat(r.gross_amount || r.amount || 0), 0) ?? 0
       const agency    = payments?.reduce((s, r) => s + parseFloat(r.hunt_models_net || 0), 0) ?? 0
-      const models_n  = new Set(payments?.map(r => r.model_name)).size
+      const models_n  = new Set(allJobs?.map(r => r.model_id).filter(Boolean)).size
       const pending   = pendingPayments?.reduce((s, r) => s + parseFloat(r.amount || 0), 0) ?? 0
       const pending_n = pendingPayments?.length ?? 0
 
       setStats({ active, volume, agency, models_n, pending, pending_n })
-      setRecent(jobs ?? [])
+      setRecent(recentJobs ?? [])
       setExpiring([])
       setLoading(false)
     }

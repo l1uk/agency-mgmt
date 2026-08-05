@@ -1,0 +1,32 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="100%" height="100%">
+  <defs>
+    <linearGradient id="navyGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#18345c" />
+      <stop offset="100%" stop-color="#0b192e" />
+    </linearGradient>
+    <linearGradient id="goldGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#fcd877" />
+      <stop offset="50%" stop-color="#e8a020" />
+      <stop offset="100%" stop-color="#b87814" />
+    </linearGradient>
+    <filter id="shadow" x="-10%" y="-10%" width="120%" height="120%">
+      <feDropShadow dx="0" dy="6" stdDeviation="10" flood-color="#000000" flood-opacity="0.35" />
+    </filter>
+  </defs>
+  
+  <!-- Background Squircle -->
+  <rect width="512" height="512" rx="118" fill="url(#navyGrad)" />
+  
+  <!-- Subtle Gold Border -->
+  <rect x="12" y="12" width="488" height="488" rx="106" fill="none" stroke="url(#goldGrad)" stroke-width="8" stroke-opacity="0.25" />
+  
+  <!-- Monogram "H" for Hunt Models -->
+  <g filter="url(#shadow)" fill="url(#goldGrad)">
+    <!-- Left vertical bar -->
+    <rect x="134" y="128" width="56" height="256" rx="18" />
+    <!-- Right vertical bar -->
+    <rect x="322" y="128" width="56" height="256" rx="18" />
+    <!-- Crossbar -->
+    <rect x="178" y="228" width="156" height="56" rx="14" />
+  </g>
+</svg>

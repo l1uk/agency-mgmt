@@ -15,6 +15,7 @@ export default function Payments({ contractId, modelName, clientName, firstJobDa
   const [editingId, setEditingId] = useState(null)
   const [editForm, setEditForm] = useState({ gross_amount: '', paid_at: '', hunt_actual_amount: '', notes: '' })
   const [agencyHuntPct, setAgencyHuntPct] = useState(0)
+  const [contractStatus, setContractStatus] = useState('active')
 
   async function load() {
     const [{ data: p }, { data: c }] = await Promise.all([
@@ -28,9 +29,12 @@ export default function Payments({ contractId, modelName, clientName, firstJobDa
   async function loadAgencyPct() {
     const { data: contract } = await supabase
       .from('contracts')
-      .select('models(agency_id, agencies(hunt_pct))')
+      .select('status, models(agency_id, agencies(hunt_pct))')
       .eq('id', contractId)
       .single()
+    if (contract?.status) {
+      setContractStatus(contract.status)
+    }
     if (contract?.models?.agencies?.hunt_pct !== undefined) {
       setAgencyHuntPct(contract.models.agencies.hunt_pct)
     }
@@ -193,48 +197,54 @@ export default function Payments({ contractId, modelName, clientName, firstJobDa
       )}
 
       {/* Add payment */}
-      <form onSubmit={addPayment} className="form-grid" style={{ marginBottom: 20 }}>
-        <div className="form-row-3">
-          <div className="field">
-            <label>Totale lavoro € *</label>
-            <input type="number" step="0.01" min="0"
-              value={form.gross_amount} onChange={e => setForm(f => ({ ...f, gross_amount: e.target.value }))}
-              placeholder="500" />
-          </div>
-          <div className="field">
-            <label>Data incasso</label>
-            <DateInput value={form.paid_at} onChange={v => setForm(f => ({ ...f, paid_at: v }))} />
-          </div>
-          <div className="field">
-            <label>Note</label>
-            <input value={form.notes} onChange={e => setForm(f => ({ ...f, notes: e.target.value }))}
-              placeholder="Opzionale" />
-          </div>
+      {['expired', 'cancelled'].includes(contractStatus) ? (
+        <div className="alert alert-error" style={{ marginBottom: 20 }}>
+          Non puoi registrare incassi su un lavoro in stato "{contractStatus === 'expired' ? 'Scaduto' : 'Annullato'}".
         </div>
-        <div style={{ fontSize: 13, color: 'var(--text-2)', marginTop: 6, marginBottom: 4 }}>
-          Nota: se non inserisci la data incasso, l'incasso rimane <strong>pendente</strong> e non viene conteggiato nei totali mostrati nella dashboard. Quando inserisci la data, l'incasso risulterà come effettuato e concorrerà ai totali.
-        </div>
-        {form.paid_at && (
-          <div className="form-row-2">
+      ) : (
+        <form onSubmit={addPayment} className="form-grid" style={{ marginBottom: 20 }}>
+          <div className="form-row-3">
             <div className="field">
-              <label>Incasso effettivo Hunt</label>
-              <input
-                type="number"
-                step="0.01"
-                min="0"
-                value={form.hunt_actual_amount}
-                onChange={e => setForm(f => ({ ...f, hunt_actual_amount: e.target.value }))}
-              />
+              <label>Totale lavoro € *</label>
+              <input type="number" step="0.01" min="0"
+                value={form.gross_amount} onChange={e => setForm(f => ({ ...f, gross_amount: e.target.value }))}
+                placeholder="500" />
             </div>
-            
+            <div className="field">
+              <label>Data incasso</label>
+              <DateInput value={form.paid_at} onChange={v => setForm(f => ({ ...f, paid_at: v }))} />
+            </div>
+            <div className="field">
+              <label>Note</label>
+              <input value={form.notes} onChange={e => setForm(f => ({ ...f, notes: e.target.value }))}
+                placeholder="Opzionale" />
+            </div>
           </div>
-        )}
-        <div>
-          <button type="submit" className="btn btn-primary btn-sm" disabled={saving}>
-            {saving ? '...' : '+ Registra incasso'}
-          </button>
-        </div>
-      </form>
+          <div style={{ fontSize: 13, color: 'var(--text-2)', marginTop: 6, marginBottom: 4 }}>
+            Nota: se non inserisci la data incasso, l'incasso rimane <strong>pendente</strong> e non viene conteggiato nei totali mostrati nella dashboard. Quando inserisci la data, l'incasso risulterà come effettuato e concorrerà ai totali.
+          </div>
+          {form.paid_at && (
+            <div className="form-row-2">
+              <div className="field">
+                <label>Incasso effettivo Hunt</label>
+                <input
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  value={form.hunt_actual_amount}
+                  onChange={e => setForm(f => ({ ...f, hunt_actual_amount: e.target.value }))}
+                />
+              </div>
+              
+            </div>
+          )}
+          <div>
+            <button type="submit" className="btn btn-primary btn-sm" disabled={saving}>
+              {saving ? '...' : '+ Registra incasso'}
+            </button>
+          </div>
+        </form>
+      )}
 
       {/* Payments + commissions table */}
       {(commissions.length > 0 || pendingPaymentsCount > 0) && (

@@ -104,7 +104,7 @@ create table if not exists contracts (
   client_name      text not null,
   reference_amount numeric(10,2),
   exclusive        boolean not null default true,
-  status           text check (status in ('active','expired','cancelled'))
+  status           text check (status in ('active','expiring','expired','cancelled'))
                    default 'active',
   first_job_date   date,
   notes            text,
@@ -170,7 +170,7 @@ alter table contracts drop constraint if exists contracts_status_check;
 
 alter table contracts
   add constraint contracts_status_check
-  check (status in ('active','expired','cancelled'));
+  check (status in ('active','expiring','expired','cancelled'));
 
 create table if not exists payments (
   id          uuid primary key default gen_random_uuid(),

@@ -148,11 +148,12 @@ export default function Models() {
               options={schoolOptions}
               emptyLabel="— nessuna —"
               placeholder="Seleziona scuola"
+              disabled={!!form.agent_id}
             />
             <SearchableSelect
               label={<>Agente {form.school_id && <span style={{color:'var(--danger)',fontSize:11,marginLeft:6}}>⚠ non disponibile se c'è una scuola</span>}</>}
               value={form.agent_id}
-              onChange={value => set('agent_id', value)}
+              onChange={value => { set('agent_id', value); if (value) set('school_id', '') }}
               options={agentOptions}
               emptyLabel="— nessuno —"
               placeholder="Seleziona agente"
