@@ -5,10 +5,12 @@ import DateInput from '../components/DateInput'
 
 const fmt = n => '€' + parseFloat(n || 0).toLocaleString('it-IT', { minimumFractionDigits: 2 })
 
+const today = () => new Date().toISOString().slice(0, 10)
+
 export default function Payments({ contractId, modelName, clientName, firstJobDate, onFirstJobChange, onPaymentsChange }) {
   const [payments, setPayments] = useState([])
   const [commissions, setCommissions] = useState([])
-  const [form, setForm] = useState({ gross_amount: '', paid_at: '', hunt_actual_amount: '', notes: '' })
+  const [form, setForm] = useState({ job_date: today(), gross_amount: '', paid_at: '', hunt_actual_amount: '', notes: '' })
   const [jobDate, setJobDate] = useState(firstJobDate ?? '')
   const [msg, setMsg] = useState(null)
   const [saving, setSaving] = useState(false)
@@ -69,17 +71,22 @@ export default function Payments({ contractId, modelName, clientName, firstJobDa
           : parseFloat((parseFloat(form.gross_amount || 0) * parseFloat(agencyPct || 0) / 100).toFixed(2)))
       : null
 
-    const { error } = await supabase.from('payments').insert({
+    const payload = {
       contract_id: contractId,
       amount:  parseFloat(form.gross_amount),
       paid_at: form.paid_at || null,
       hunt_actual_amount: huntValue,
       notes:   form.notes || null,
-    })
+    }
+    if (form.job_date) {
+      payload.created_at = `${form.job_date}T12:00:00.000Z`
+    }
+
+    const { error } = await supabase.from('payments').insert(payload)
     setSaving(false)
     if (error) { flash('error', error.message); return }
     flash('success', 'Incasso registrato.')
-    setForm({ gross_amount: '', paid_at: '', hunt_actual_amount: '', notes: '' })
+    setForm({ job_date: today(), gross_amount: '', paid_at: '', hunt_actual_amount: '', notes: '' })
     await load()
     onPaymentsChange?.()
   }
@@ -203,13 +210,19 @@ export default function Payments({ contractId, modelName, clientName, firstJobDa
         </div>
       ) : (
         <form onSubmit={addPayment} className="form-grid" style={{ marginBottom: 20 }}>
-          <div className="form-row-3">
+          <div className="form-row-2">
+            <div className="field">
+              <label>Data lavoro</label>
+              <DateInput value={form.job_date} onChange={v => setForm(f => ({ ...f, job_date: v }))} />
+            </div>
             <div className="field">
               <label>Totale lavoro € *</label>
               <input type="number" step="0.01" min="0"
                 value={form.gross_amount} onChange={e => setForm(f => ({ ...f, gross_amount: e.target.value }))}
                 placeholder="500" />
             </div>
+          </div>
+          <div className="form-row-2">
             <div className="field">
               <label>Data incasso</label>
               <DateInput value={form.paid_at} onChange={v => setForm(f => ({ ...f, paid_at: v }))} />
