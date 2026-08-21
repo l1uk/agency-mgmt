@@ -56,9 +56,8 @@ export default function AgentView() {
   )
 
   const totals = filtered.reduce((acc, r) => ({
-    amount:       acc.amount       + parseFloat(r.gross_amount ?? r.amount ?? 0),
     agent_amount: acc.agent_amount + parseFloat(r.agent_amount ?? 0),
-  }), { amount: 0, agent_amount: 0 })
+  }), { agent_amount: 0 })
 
   if (loading) return <div className="loading">Caricamento...</div>
 
@@ -83,16 +82,16 @@ export default function AgentView() {
 
         <div className="stats-grid">
           <div className="stat-card">
-            <div className="stat-label">Incassi totali (tuoi modelli)</div>
-            <div className="stat-value" style={{ fontSize: 19 }}>{fmt(totals.amount)}</div>
-          </div>
-          <div className="stat-card">
             <div className="stat-label">Tue provvigioni totali</div>
             <div className="stat-value accent" style={{ fontSize: 19 }}>{fmt(totals.agent_amount)}</div>
           </div>
           <div className="stat-card">
             <div className="stat-label">Modelli attivi</div>
             <div className="stat-value">{new Set(filtered.map(r => r.model_name)).size}</div>
+          </div>
+          <div className="stat-card">
+            <div className="stat-label">Incassi registrati</div>
+            <div className="stat-value">{filtered.length}</div>
           </div>
         </div>
 
