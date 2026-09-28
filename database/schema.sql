@@ -299,6 +299,8 @@ select
   py.amount        as gross_amount,
   py.hunt_actual_amount,
   py.paid_at,
+  py.created_at,
+  case when py.paid_at is not null then 'paid' else 'pending' end as payment_status,
   py.notes         as payment_notes,
 
   c.client_name,
@@ -326,25 +328,25 @@ select
 
   round(py.amount * coalesce(a.hunt_pct, 0) / 100, 2) as hunt_theoretical_amount,
 
-  months_since_first_payment(m.id, py.paid_at) as rel_month_from_first_payment,
-  months_since_first_payment(m.id, py.paid_at) as months_from_first_payment,
+  months_since_first_payment(m.id, coalesce(py.paid_at, py.created_at::date, current_date)) as rel_month_from_first_payment,
+  months_since_first_payment(m.id, coalesce(py.paid_at, py.created_at::date, current_date)) as months_from_first_payment,
   
   case when c.first_job_date is not null
     then (
-      extract(year  from age(py.paid_at, c.first_job_date)) * 12 +
-      extract(month from age(py.paid_at, c.first_job_date))
+      extract(year  from age(coalesce(py.paid_at, py.created_at::date, current_date), c.first_job_date)) * 12 +
+      extract(month from age(coalesce(py.paid_at, py.created_at::date, current_date), c.first_job_date))
     )::int
     else null
   end as months_from_first_job,
   
-  total_paid_by_model(m.id, py.paid_at)        as cumulative_paid,
+  total_paid_by_model(m.id, coalesce(py.paid_at, py.created_at::date, current_date))        as cumulative_paid,
 
   -- calcoli basati sull'importo HUNT dell'agenzia (hunt_theoretical_amount)
   -- md_pct: percentuale MD come prima
   case when m.school_id is not null
     then md_pct(
-      months_since_first_payment(m.id, py.paid_at),
-      total_paid_by_model(m.id, py.paid_at)
+      coalesce(months_since_first_payment(m.id, coalesce(py.paid_at, py.created_at::date, current_date)), 0),
+      total_paid_by_model(m.id, coalesce(py.paid_at, py.created_at::date, current_date))
     )
     else 0
   end as md_pct,
@@ -357,8 +359,8 @@ select
     round(py.amount * coalesce(a.hunt_pct, 0) / 100, 2) *
     case when m.school_id is not null
       then md_pct(
-        months_since_first_payment(m.id, py.paid_at),
-        total_paid_by_model(m.id, py.paid_at)
+        coalesce(months_since_first_payment(m.id, coalesce(py.paid_at, py.created_at::date, current_date)), 0),
+        total_paid_by_model(m.id, coalesce(py.paid_at, py.created_at::date, current_date))
       )
       else 0
     end / 100
@@ -367,7 +369,7 @@ select
   -- quota agente: percentuale e importo calcolato su hunt_amount
   case when m.agent_id is not null
     then agent_pct(
-      c.first_job_date, py.paid_at, c.exclusive,
+      c.first_job_date, coalesce(py.paid_at, py.created_at::date, current_date), c.exclusive,
       coalesce(ag.commission_pct_exclusive, 10),
       coalesce(ag.commission_pct_open, 7),
       coalesce(ag.commission_pct_month13, 5)
@@ -379,7 +381,7 @@ select
     round(py.amount * coalesce(a.hunt_pct, 0) / 100, 2) *
     case when m.agent_id is not null
       then agent_pct(
-        c.first_job_date, py.paid_at, c.exclusive,
+        c.first_job_date, coalesce(py.paid_at, py.created_at::date, current_date), c.exclusive,
         coalesce(ag.commission_pct_exclusive, 10),
         coalesce(ag.commission_pct_open, 7),
         coalesce(ag.commission_pct_month13, 5)
@@ -400,8 +402,8 @@ select
         round(py.amount * coalesce(a.hunt_pct, 0) / 100, 2) *
         case when m.school_id is not null
           then md_pct(
-            months_since_first_payment(m.id, py.paid_at),
-            total_paid_by_model(m.id, py.paid_at)
+            coalesce(months_since_first_payment(m.id, coalesce(py.paid_at, py.created_at::date, current_date)), 0),
+            total_paid_by_model(m.id, coalesce(py.paid_at, py.created_at::date, current_date))
           )
           else 0
         end / 100
@@ -410,7 +412,7 @@ select
         round(py.amount * coalesce(a.hunt_pct, 0) / 100, 2) *
         case when m.agent_id is not null
           then agent_pct(
-            c.first_job_date, py.paid_at, c.exclusive,
+            c.first_job_date, coalesce(py.paid_at, py.created_at::date, current_date), c.exclusive,
             coalesce(ag.commission_pct_exclusive, 10),
             coalesce(ag.commission_pct_open, 7),
             coalesce(ag.commission_pct_month13, 5)
@@ -430,8 +432,7 @@ join  models    m  on m.id  = c.model_id
 left join agencies a   on a.id = m.agency_id
 left join schools s   on s.id  = m.school_id
 left join agents  ag  on ag.id = m.agent_id
-left join agents  giorgio_ag on giorgio_ag.is_giorgio_agent = true
-where py.paid_at is not null;
+left join agents  giorgio_ag on giorgio_ag.is_giorgio_agent = true;
 
 
 drop view if exists pending_incomes cascade;
@@ -531,6 +532,10 @@ create policy "agency_all" on contract_notification_log for all using (auth_role
 create policy "agency_all" on payments                for all using (auth_role() = 'agency');
 
 -- scuola: sola lettura sui propri dati
+create policy "school_read_self" on schools
+  for select using (
+    auth_role() = 'school' and id::text = auth_school_id()
+  );
 create policy "school_read" on models
   for select using (
     auth_role() = 'school' and school_id::text = auth_school_id()
@@ -551,6 +556,10 @@ create policy "school_read" on payments
   );
 
 -- agente: sola lettura sui propri dati
+create policy "agent_read_self" on agents
+  for select using (
+    auth_role() = 'agent' and id::text = auth_agent_id()
+  );
 create policy "agent_read" on models
   for select using (
     auth_role() = 'agent' and agent_id::text = auth_agent_id()
@@ -568,6 +577,12 @@ create policy "agent_read" on payments
       join models m on m.id = c.model_id
       where m.agent_id::text = auth_agent_id()
     )
+  );
+
+-- lettura agenzie necessaria per il calcolo provvigioni da viste
+create policy "agencies_read_all_roles" on agencies
+  for select using (
+    auth_role() in ('agency', 'school', 'agent')
   );
 
 

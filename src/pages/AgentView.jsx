@@ -7,9 +7,11 @@ import { formatDateShort } from '../lib/format'
 const fmt = n => '€' + parseFloat(n || 0).toLocaleString('it-IT', { minimumFractionDigits: 2 })
 
 function exportCSV(rows, agentName) {
-  const headers = ['Modello', 'Cliente', 'Data incasso', 'Importo', 'Mese rel.', '% Agente', '€ Agente']
+  const headers = ['Modello', 'Cliente', 'Data', 'Stato incasso', 'Importo', 'Mese rel.', '% Agente', '€ Agente']
   const lines = rows.map(r => [
-    r.model_name, r.client_name, r.paid_at, r.gross_amount ?? r.amount,
+    r.model_name, r.client_name, r.paid_at ?? r.created_at?.slice(0,10),
+    r.paid_at ? 'Incassato' : 'In attesa',
+    r.gross_amount ?? r.amount,
     r.rel_month_from_first_payment, r.agent_pct, r.agent_amount
   ].join(';'))
   const csv  = [headers.join(';'), ...lines].join('\n')
@@ -28,7 +30,7 @@ export default function AgentView() {
   const [rows, setRows]       = useState([])
   const [agentName, setAgentName] = useState('')
   const [loading, setLoading] = useState(true)
-  const [filter, setFilter]   = useState({ model: '' })
+  const [filter, setFilter]   = useState({ model: '', status: 'all' })
 
   useEffect(() => {
     async function load() {
@@ -40,7 +42,7 @@ export default function AgentView() {
         supabase.from('payment_commissions')
           .select('*')
           .eq('agent_id', agentId)
-          .order('paid_at', { ascending: false }),
+          .order('paid_at', { ascending: false, nullsFirst: false }),
       ])
       setAgentName(agentData?.name ?? '')
       setRows(commData ?? [])
@@ -51,13 +53,25 @@ export default function AgentView() {
 
   const handleSignOut = async () => { await signOut(); navigate('/login') }
 
-  const filtered = rows.filter(r =>
-    !filter.model || r.model_name.toLowerCase().includes(filter.model.toLowerCase())
-  )
+  const filtered = rows.filter(r => {
+    if (filter.model && !r.model_name.toLowerCase().includes(filter.model.toLowerCase())) return false
+    const isPaid = !!r.paid_at || r.payment_status === 'paid'
+    if (filter.status === 'paid' && !isPaid) return false
+    if (filter.status === 'pending' && isPaid) return false
+    return true
+  })
 
-  const totals = filtered.reduce((acc, r) => ({
-    agent_amount: acc.agent_amount + parseFloat(r.agent_amount ?? 0),
-  }), { agent_amount: 0 })
+  const totals = filtered.reduce((acc, r) => {
+    const isPaid = !!r.paid_at || r.payment_status === 'paid'
+    const amt = parseFloat(r.agent_amount ?? 0)
+    if (isPaid) {
+      acc.paid_amount += amt
+    } else {
+      acc.pending_amount += amt
+    }
+    acc.total_amount += amt
+    return acc
+  }, { paid_amount: 0, pending_amount: 0, total_amount: 0 })
 
   if (loading) return <div className="loading">Caricamento...</div>
 
@@ -82,49 +96,87 @@ export default function AgentView() {
 
         <div className="stats-grid">
           <div className="stat-card">
-            <div className="stat-label">Tue provvigioni totali</div>
-            <div className="stat-value accent" style={{ fontSize: 19 }}>{fmt(totals.agent_amount)}</div>
+            <div className="stat-label">Provvigioni incassate</div>
+            <div className="stat-value accent" style={{ fontSize: 19 }}>{fmt(totals.paid_amount)}</div>
+          </div>
+          <div className="stat-card">
+            <div className="stat-label">Provvigioni in attesa</div>
+            <div className="stat-value" style={{ fontSize: 19, color: '#d97706' }}>{fmt(totals.pending_amount)}</div>
           </div>
           <div className="stat-card">
             <div className="stat-label">Modelli attivi</div>
             <div className="stat-value">{new Set(filtered.map(r => r.model_name)).size}</div>
           </div>
           <div className="stat-card">
-            <div className="stat-label">Incassi registrati</div>
+            <div className="stat-label">Lavori registrati</div>
             <div className="stat-value">{filtered.length}</div>
           </div>
         </div>
 
         <div className="card">
-          <div style={{ display: 'flex', gap: 12, marginBottom: 18, flexWrap: 'wrap' }}>
+          <div style={{ display: 'flex', gap: 12, marginBottom: 18, flexWrap: 'wrap', alignItems: 'center' }}>
             <input placeholder="Cerca modello..." value={filter.model}
               onChange={e => setFilter(f => ({ ...f, model: e.target.value }))}
               style={{ padding: '7px 12px', border: '1px solid var(--border)', borderRadius: 'var(--radius)', fontSize: 14, fontFamily: 'inherit', flex: 1, minWidth: 160 }} />
-            <button className="btn btn-ghost" onClick={() => exportCSV(filtered, agentName)}>↓ Esporta CSV</button>
+            
+            <div style={{ display: 'flex', gap: 6 }}>
+              <button
+                className={`btn btn-sm ${filter.status === 'all' ? 'btn-primary' : 'btn-ghost'}`}
+                onClick={() => setFilter(f => ({ ...f, status: 'all' }))}
+              >
+                Tutti
+              </button>
+              <button
+                className={`btn btn-sm ${filter.status === 'paid' ? 'btn-primary' : 'btn-ghost'}`}
+                onClick={() => setFilter(f => ({ ...f, status: 'paid' }))}
+              >
+                Incassati
+              </button>
+              <button
+                className={`btn btn-sm ${filter.status === 'pending' ? 'btn-primary' : 'btn-ghost'}`}
+                onClick={() => setFilter(f => ({ ...f, status: 'pending' }))}
+              >
+                In attesa
+              </button>
+            </div>
+
+            <button className="btn btn-ghost btn-sm" onClick={() => exportCSV(filtered, agentName)}>↓ Esporta CSV</button>
           </div>
 
           <div className="table-wrap">
             <table>
               <thead>
                 <tr>
-                  <th>Modello</th><th>Cliente</th><th>Data incasso</th>
-                  <th>Importo</th><th>Mese</th><th>% Agente</th><th>€ Agente</th>
+                  <th>Modello</th><th>Cliente</th><th>Data</th>
+                  <th>Importo</th><th>Mese</th><th>% Agente</th><th>€ Agente</th><th>Stato</th>
                 </tr>
               </thead>
               <tbody>
                 {filtered.length === 0
-                  ? <tr><td colSpan={7}><div className="empty">Nessun incasso trovato.</div></td></tr>
-                  : filtered.map(r => (
-                    <tr key={r.payment_id}>
-                      <td style={{ fontWeight: 500 }}>{r.model_name}</td>
-                      <td>{r.client_name}</td>
-                      <td style={{ fontSize: 13 }}>{formatDateShort(r.paid_at)}</td>
-                      <td className="mono">{fmt(r.gross_amount ?? r.amount)}</td>
-                      <td style={{ textAlign: 'center', color: 'var(--text-2)', fontSize: 13 }}>{r.rel_month_from_first_payment}</td>
-                      <td style={{ fontWeight: 600, color: 'var(--accent-dim)' }}>{r.agent_pct}%</td>
-                      <td className="mono" style={{ fontWeight: 600 }}>{fmt(r.agent_amount)}</td>
-                    </tr>
-                  ))
+                  ? <tr><td colSpan={8}><div className="empty">Nessun lavoro trovato.</div></td></tr>
+                  : filtered.map(r => {
+                    const isPaid = !!r.paid_at || r.payment_status === 'paid'
+                    return (
+                      <tr key={r.payment_id} style={!isPaid ? { background: '#fffdf5' } : {}}>
+                        <td style={{ fontWeight: 500 }}>{r.model_name}</td>
+                        <td>{r.client_name}</td>
+                        <td style={{ fontSize: 13 }}>
+                          {formatDateShort(r.paid_at ?? r.created_at)}
+                        </td>
+                        <td className="mono">{fmt(r.gross_amount ?? r.amount)}</td>
+                        <td style={{ textAlign: 'center', color: 'var(--text-2)', fontSize: 13 }}>{r.rel_month_from_first_payment ?? 0}</td>
+                        <td style={{ fontWeight: 600, color: 'var(--accent-dim)' }}>{r.agent_pct}%</td>
+                        <td className="mono" style={{ fontWeight: 600, color: isPaid ? 'var(--text)' : '#d97706' }}>
+                          {fmt(r.agent_amount)}
+                        </td>
+                        <td>
+                          {isPaid
+                            ? <span className="badge badge-active">Incassato</span>
+                            : <span className="badge badge-expiring">In attesa</span>}
+                        </td>
+                      </tr>
+                    )
+                  })
                 }
               </tbody>
             </table>
